@@ -1,0 +1,6 @@
+# Claude Code Memory & Context
+.claude/memory/
+.claude/context-store/
+
+# Except keep the structure
+!.claude/memory/MEMORY.md

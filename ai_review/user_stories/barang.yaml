@@ -1,0 +1,39 @@
+# User Stories for Keu-app Master Barang
+
+stories:
+  - name: "Master Barang page loads"
+    url: "http://localhost:3000/admin/master/barang"
+    workflow: |
+      1. Verify page loads without errors
+      2. Verify page heading "Master Barang" is visible
+      3. Verify data table is displayed
+      4. Verify "Tambah Barang" button is visible
+
+  - name: "Add Barang modal opens"
+    url: "http://localhost:3000/admin/master/barang"
+    workflow: |
+      1. Verify master barang page loads
+      2. Click "Tambah Barang" button
+      3. Verify modal/popup opens
+      4. Verify form fields are displayed (Nama Barang, Satuan, Harga)
+      5. Verify Cancel and Save buttons are visible
+
+  - name: "Search filter works"
+    url: "http://localhost:3000/admin/master/barang"
+    workflow: |
+      1. Verify master barang page loads with data
+      2. Find search input field
+      3. Enter search term (e.g., "Laptop")
+      4. Verify table filters results
+      5. Clear search
+      6. Verify all data returns
+
+  - name: "Edit Barang works"
+    url: "http://localhost:3000/admin/master/barang"
+    workflow: |
+      1. Verify master barang page loads with data
+      2. Click edit button on first row
+      3. Verify edit modal opens with pre-filled data
+      4. Modify a field (e.g., nama barang)
+      5. Click save/update button
+      6. Verify success message or updated row

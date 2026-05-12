@@ -1,0 +1,100 @@
+# ================================================
+# Root .gitignore - D--TestLaB-Fitur
+# ================================================
+
+# --- Dependencies ---
+node_modules/
+vendor/
+
+# --- Build outputs ---
+.docusaurus/
+.cache/
+public/build/
+public/hot/
+public/storage/
+storage/*.key
+storage/pail/
+/vendor
+
+# --- Environment (.env BUKAN .env.example) ---
+.env
+.env.local
+.env.*.local
+.env.backup
+.env.production
+
+# --- Logs ---
+*.log
+npm-debug.log*
+laravel*.log
+*.log.*
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.zed/
+.nova/
+.fleet/
+.phpactor.json
+
+# --- Test / Coverage ---
+.phpunit.result.cache
+/.phpunit.cache
+coverage/
+.clover
+*.lcov
+
+# --- Playwright / Browser MCP ---
+.playwright-cli/
+.playwright-mcp/
+
+# --- Laravel / Horizon ---
+/bootstrap/cache/
+/horizon/
+*.cache
+
+# --- Build artifacts ---
+dist/
+build/
+out/
+
+# --- Python (docs/pwt) ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+dist/
+*.whl
+venv/
+ENV/
+
+# --- Temporary / Debug ---
+*.tmp
+*.temp
+tmp/
+temp/
+*.bak
+*.swp
+
+# --- Credentials / Secrets (safety net) ---
+*.pem
+*.key
+credentials.json
+secrets.json
+
+#reference
+/pwt
+/ai-review
+/docs
+
+#misc
+serve8080.bat

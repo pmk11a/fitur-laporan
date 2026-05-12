@@ -1,0 +1,23 @@
+{
+  "_info": {
+    "keu_app": "Keu-app uses database 'dbwbcp2'. Stored procedure mappings will be discovered via scan and added here.",
+    "kps_reference": "KSP-specific SP mappings moved to sp_mappings_kps_reference.json"
+  },
+  "_description": "Stored procedure to table mapping for Delphi to Laravel generator",
+  "_version": "1.1.0",
+  "stored_procedures": {},
+  "operation_types": {
+    "crud": {
+      "description": "Create, Read, Update, Delete operations",
+      "generates": ["index", "store", "show", "update", "destroy"]
+    },
+    "initialize": {
+      "description": "Initialize/setup data for entity",
+      "generates": ["get*", "update*", "copy*"]
+    },
+    "closing": {
+      "description": "Closing process operations",
+      "generates": ["process*", "close*"]
+    }
+  }
+}

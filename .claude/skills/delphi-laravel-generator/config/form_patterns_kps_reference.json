@@ -1,0 +1,48 @@
+{
+  "_info": {
+    "keu_app": "Keu-app uses database 'dbwbcp2' and Delphi source in 'pwt/' folder.",
+    "kps_reference": "KSP-specific form patterns moved to form_patterns_kps_reference.json"
+  },
+  "_description": "Form reference patterns for Delphi to Laravel generator",
+  "_version": "1.1.0",
+  "patterns": {
+    "application_create_form": {
+      "pattern": "Application\\.CreateForm\\(T(\\w+),\\s*\\1\\)",
+      "extract_group": 1,
+      "description": "Creates and shows a form instance",
+      "action": "scan_referenced_form",
+      "example": "Application.CreateForm(TFrmBarang, FrmBarang)"
+    },
+    "show_modal": {
+      "pattern": "(\\w+Form)\\.ShowModal",
+      "extract_group": 1,
+      "description": "Shows a form as modal dialog",
+      "action": "scan_referenced_form",
+      "example": "FrmHarga.ShowModal"
+    },
+    "with_form_do": {
+      "pattern": "with\\s+(\\w+Form)\\s+do",
+      "extract_group": 1,
+      "description": "Direct form access with with block",
+      "action": "scan_referenced_form",
+      "example": "with FrmStok do"
+    },
+    "form_variable_access": {
+      "pattern": "(Frm\\w+)\\.(Show|ShowModal|Close)",
+      "extract_group": 1,
+      "description": "Form variable method call",
+      "action": "scan_referenced_form",
+      "example": "FrmBarang.ShowModal"
+    }
+  },
+  "search_strategy": {
+    "method": "glob_wildcard",
+    "pattern": "**/{FormName}.pas",
+    "description": "Search entire codebase for referenced form files",
+    "search_roots": ["pwt", "KSP"]
+  },
+  "known_forms": {},
+  "controller_injection_rules": {
+    "description": "Rules for auto-injecting services into controllers"
+  }
+}

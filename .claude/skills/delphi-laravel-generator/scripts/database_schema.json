@@ -1,0 +1,98 @@
+{
+  "scan_date": "2026-04-18T12:50:30.386873",
+  "database": "ksppare",
+  "tables": {
+    "dbPemakai": {
+      "table_name": "dbPemakai",
+      "primary_key": "UserID",
+      "primary_keys": [],
+      "columns": [
+        {
+          "name": "UseName",
+          "type": "varchar",
+          "max_length": 50,
+          "nullable": false,
+          "default": "('')",
+          "position": 1,
+          "laravel_type": "string",
+          "php_type": "string",
+          "fillable": true,
+          "cast": "string"
+        },
+        {
+          "name": "UserID",
+          "type": "varchar",
+          "max_length": 20,
+          "nullable": false,
+          "default": "('')",
+          "position": 2,
+          "laravel_type": "string",
+          "php_type": "string",
+          "fillable": true,
+          "cast": "string"
+        },
+        {
+          "name": "Passwd",
+          "type": "varchar",
+          "max_length": 20,
+          "nullable": false,
+          "default": "('')",
+          "position": 3,
+          "laravel_type": "string",
+          "php_type": "string",
+          "fillable": true,
+          "cast": "string",
+          "hidden": true,
+          "notes": "PLAIN TEXT PASSWORD - TODO: Migrate to bcrypt"
+        },
+        {
+          "name": "UserLevel",
+          "type": "int",
+          "max_length": null,
+          "nullable": false,
+          "default": "(0)",
+          "position": 4,
+          "laravel_type": "integer",
+          "php_type": "int",
+          "fillable": true,
+          "cast": "integer"
+        },
+        {
+          "name": "Masuk",
+          "type": "varchar",
+          "max_length": 2,
+          "nullable": false,
+          "default": "('')",
+          "position": 5,
+          "laravel_type": "string",
+          "php_type": "string",
+          "fillable": true,
+          "cast": "string",
+          "notes": "Y = Active, T/N = Inactive"
+        },
+        {
+          "name": "Reg",
+          "type": "int",
+          "max_length": null,
+          "nullable": false,
+          "default": "(0)",
+          "position": 6,
+          "laravel_type": "integer",
+          "php_type": "int",
+          "fillable": true,
+          "cast": "integer"
+        }
+      ],
+      "foreign_keys": [],
+      "model_name": "User",
+      "auto_increment": false,
+      "notes": "User table - No primary key defined in database, UserID used as identifier. Password stored as PLAIN TEXT (varchar 20)."
+    }
+  },
+  "metadata": {
+    "total_tables": 100,
+    "tables_scanned": 1,
+    "scan_type": "partial",
+    "verified": true
+  }
+}

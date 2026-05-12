@@ -1,0 +1,117 @@
+{
+  "mappings": {
+    "FrmPengajuan": {
+      "primary": "dbpengajuan",
+      "related": ["dbjaminan", "dbcustomer", "dbproduk"],
+      "model": "Pengajuan",
+      "primary_key": "NoBukti",
+      "validated": true,
+      "notes": "Auto-confirmed via DFM+SQL scan"
+    },
+    "FrmRealisasi": {
+      "primary": "dbpengajuan",
+      "related": ["dbangsuran", "dbcustomer"],
+      "model": "Pengajuan",
+      "primary_key": "NoBukti",
+      "validated": true,
+      "notes": "Share table dengan FrmPengajuan - update status"
+    },
+    "FrmAnggota": {
+      "primary": "dbcustomer",
+      "related": ["dbarea", "dbkota"],
+      "model": "Anggota",
+      "primary_key": "KodeCust",
+      "validated": true
+    },
+    "FrmPinjaman": {
+      "primary": "dbpinjaman",
+      "related": ["dbcustomer", "dbangsuran"],
+      "model": "Pinjaman",
+      "primary_key": "NoKredit",
+      "validated": true
+    },
+    "FrmAngsuran": {
+      "primary": "dbangsuran",
+      "related": ["dbpinjaman", "dbkasbank"],
+      "model": "Angsuran",
+      "primary_key": "ID",
+      "auto_increment": true,
+      "validated": true
+    },
+    "FrmJaminan": {
+      "primary": "dbjaminan",
+      "related": ["dbpengajuan"],
+      "model": "Jaminan",
+      "primary_key": "NoBukti",
+      "validated": true
+    },
+    "FrmProduk": {
+      "primary": "dbproduk",
+      "related": [],
+      "model": "Produk",
+      "primary_key": "KodePrd",
+      "validated": true
+    },
+    "FrmKasBank": {
+      "primary": "dbkasbank",
+      "related": ["dbperkiraan"],
+      "model": "KasBank",
+      "primary_key": "NoBukti",
+      "validated": true
+    },
+    "FrmMemorial": {
+      "primary": "dbmemorial",
+      "related": ["dbperkiraan"],
+      "model": "Memorial",
+      "primary_key": "NoBukti",
+      "validated": true
+    },
+    "FrmPerkiraan": {
+      "primary": "dbperkiraan",
+      "related": [],
+      "model": "Perkiraan",
+      "primary_key": "NoPerkiraan",
+      "validated": true
+    },
+    "FrLogin": {
+      "primary": "dbFLPASS",
+      "related": [],
+      "model": "User",
+      "primary_key": "USERID",
+      "validated": true,
+      "notes": "Login form - uses dbFLPASS for authentication. Verified against database on 2026-04-18",
+      "auth": true
+    },
+    "FrmLockPeriod": {
+      "primary": "dbLockPeriode",
+      "related": ["dbUser"],
+      "model": "LockPeriode",
+      "primary_key": "ID",
+      "validated": true,
+      "notes": "Period locking - from MyCek_Lock_Periode function"
+    },
+    "FrmMain": {
+      "primary": null,
+      "related": [],
+      "model": null,
+      "primary_key": null,
+      "validated": true,
+      "notes": "Main menu form - UI only, no direct table mapping"
+    },
+    "FrmUtama": {
+      "primary": "dbFlMenu",
+      "related": ["dbFLPASS", "dbBackGround"],
+      "model": "Menu",
+      "primary_key": null,
+      "validated": true,
+      "notes": "Dashboard/Main form - uses dbFlMenu for permissions. Generated DashboardController+Menu model. Verified 2026-04-19"
+    }
+  },
+  "global_settings": {
+    "default_connection": "sqlsrv",
+    "charset": "utf8",
+    "collation": "utf8_unicode_ci",
+    "prefix": "",
+    "strict_mode": false
+  }
+}

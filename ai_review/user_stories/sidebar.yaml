@@ -1,0 +1,47 @@
+# User Stories for Keu-app Sidebar Navigation
+
+stories:
+  - name: "Sidebar loads with menu items"
+    url: "http://localhost:3000/admin"
+    workflow: |
+      1. Verify sidebar is visible on left side
+      2. Verify Dashboard menu item is visible
+      3. Verify Master Data group is visible
+      4. Verify at least one menu icon is displayed
+
+  - name: "Sidebar group expands on click"
+    url: "http://localhost:3000/admin"
+    workflow: |
+      1. Verify sidebar loads
+      2. Find collapsed menu group (e.g., Master Data)
+      3. Click on the group header
+      4. Verify child menu items appear
+      5. Verify chevron icon rotates
+
+  - name: "Sidebar collapses and expands"
+    url: "http://localhost:3000/admin"
+    workflow: |
+      1. Verify sidebar is in expanded state
+      2. Find and click collapse toggle button
+      3. Verify sidebar width reduces
+      4. Verify menu labels are hidden
+      5. Click toggle again
+      6. Verify sidebar expands back
+
+  - name: "Menu navigation works"
+    url: "http://localhost:3000/admin"
+    workflow: |
+      1. Verify sidebar loads
+      2. Navigate to Master Data > Barang
+      3. Verify URL changes to /admin/master/barang
+      4. Verify Barang page content loads
+
+  - name: "Search filter in sidebar"
+    url: "http://localhost:3000/admin"
+    workflow: |
+      1. Verify sidebar loads with menu
+      2. Find search input in sidebar
+      3. Enter search term (e.g., "barang")
+      4. Verify menu filters to show matching items
+      5. Clear search
+      6. Verify all menu items return

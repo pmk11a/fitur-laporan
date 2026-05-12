@@ -1,0 +1,38 @@
+# User Stories for Keu-app Login Flow
+
+stories:
+  - name: "Login page loads correctly"
+    url: "http://localhost:3000/login"
+    workflow: |
+      1. Verify the login page loads
+      2. Verify email input field is visible
+      3. Verify password input field is visible
+      4. Verify login button is visible
+      5. Verify page title or heading contains "Login" or "Masuk"
+
+  - name: "Login with valid credentials"
+    url: "http://localhost:3000/login"
+    workflow: |
+      1. Verify login page loads
+      2. Enter email: admin@test.com (use selector input[type="email"] or [name="email"])
+      3. Enter password: test123 (use selector input[type="password"] or [name="password"])
+      4. Click login button
+      5. Verify redirect to /admin or /admin/dashboard
+      6. Verify no error message displayed
+
+  - name: "Login shows error for invalid credentials"
+    url: "http://localhost:3000/login"
+    workflow: |
+      1. Verify login page loads
+      2. Enter email: invalid@test.com
+      3. Enter password: wrongpassword
+      4. Click login button
+      5. Verify error message is displayed
+
+  - name: "Logout works correctly"
+    url: "http://localhost:3000/admin/dashboard"
+    workflow: |
+      1. Verify dashboard loads (user already logged in)
+      2. Click logout button in sidebar or header
+      3. Verify redirect to /login
+      4. Verify login page is displayed

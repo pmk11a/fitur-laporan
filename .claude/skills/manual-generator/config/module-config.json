@@ -1,0 +1,151 @@
+{
+  "02-01-barang": {
+    "moduleId": "02-01-barang",
+    "moduleNameId": "Master Barang",
+    "moduleNameEn": "Item Master",
+    "delphiFile": "uMasterBarang.pas",
+    "dbTables": ["DBBARANG", "DBGROUP"],
+    "model": "BARANG",
+    "storeRequest": "StoreBarangRequest",
+    "updateRequest": "UpdateBarangRequest",
+    "controller": "BarangController",
+    "navigationPath": "Master Data > Barang",
+    "permissions": [
+      { "code": "MST-001", "name": "Akses Master Barang", "actions": "Lihat, Tambah, Edit, Hapus" }
+    ],
+    "masterData": [
+      { "table": "DBGROUP", "description": "Kelompok Barang", "required": true },
+      { "table": "DBSATUAN", "description": "Satuan Barang", "required": false }
+    ],
+    "prerequisiteModules": [],
+    "overview": "Modul Master Barang digunakan untuk mengelola data barang/inventori dalam sistem. Data barang menjadi dasar untuk semua transaksi operasional seperti penjualan, pembelian, dan stok opname.",
+    "errorPrefix": "MBRNG"
+  },
+  "02-02-supplier": {
+    "moduleId": "02-02-supplier",
+    "moduleNameId": "Master Supplier",
+    "moduleNameEn": "Supplier Master",
+    "delphiFile": "uMasterSupplier.pas",
+    "dbTables": ["CUSTSUPP"],
+    "model": "CUSTSUPP",
+    "storeRequest": "StoreSupplierRequest",
+    "updateRequest": "UpdateSupplierRequest",
+    "controller": "SupplierController",
+    "navigationPath": "Master Data > Supplier",
+    "permissions": [
+      { "code": "MST-002", "name": "Akses Master Supplier", "actions": "Lihat, Tambah, Edit, Hapus" }
+    ],
+    "masterData": [],
+    "prerequisiteModules": [],
+    "overview": "Modul Master Supplier digunakan untuk mengelola data supplier/pemasok barang.",
+    "errorPrefix": "MSUPP"
+  },
+  "02-03-customer": {
+    "moduleId": "02-03-customer",
+    "moduleNameId": "Master Customer",
+    "moduleNameEn": "Customer Master",
+    "delphiFile": "uMasterCustomer.pas",
+    "dbTables": ["CUSTSUPP", "CUSTOMEREVA"],
+    "model": "CUSTOMEREVA",
+    "storeRequest": "StoreCustomerRequest",
+    "updateRequest": "UpdateCustomerRequest",
+    "controller": "CustomerController",
+    "navigationPath": "Master Data > Customer",
+    "permissions": [
+      { "code": "MST-003", "name": "Akses Master Customer", "actions": "Lihat, Tambah, Edit, Hapus" }
+    ],
+    "masterData": [
+      { "table": "AREA", "description": "Area/Wilayah", "required": false }
+    ],
+    "prerequisiteModules": [],
+    "overview": "Modul Master Customer digunakan untuk mengelola data pelanggan.",
+    "errorPrefix": "MCUST"
+  },
+  "02-04-satuan": {
+    "moduleId": "02-04-satuan",
+    "moduleNameId": "Master Satuan",
+    "moduleNameEn": "Unit of Measure",
+    "delphiFile": "uMasterSatuan.pas",
+    "dbTables": ["DBSATUAN"],
+    "model": "SATUAN",
+    "storeRequest": "StoreSatuanRequest",
+    "updateRequest": "UpdateSatuanRequest",
+    "controller": "SatuanController",
+    "navigationPath": "Master Data > Satuan",
+    "permissions": [
+      { "code": "MST-004", "name": "Akses Master Satuan", "actions": "Lihat, Tambah, Edit, Hapus" }
+    ],
+    "masterData": [],
+    "prerequisiteModules": [],
+    "overview": "Modul Master Satuan digunakan untuk mengelola satuan barang (Unit, Pcs, Box, dll).",
+    "errorPrefix": "MSAT"
+  },
+  "02-05-gudang": {
+    "moduleId": "02-05-gudang",
+    "moduleNameId": "Master Gudang",
+    "moduleNameEn": "Warehouse Master",
+    "delphiFile": "uMasterGudang.pas",
+    "dbTables": ["GUDANG", "LOKASI"],
+    "model": "GUDANG",
+    "storeRequest": "StoreGudangRequest",
+    "updateRequest": "UpdateGudangRequest",
+    "controller": "GudangController",
+    "navigationPath": "Master Data > Gudang",
+    "permissions": [
+      { "code": "MST-005", "name": "Akses Master Gudang", "actions": "Lihat, Tambah, Edit, Hapus" }
+    ],
+    "masterData": [],
+    "prerequisiteModules": [],
+    "overview": "Modul Master Gudang digunakan untuk mengelola lokasi penyimpanan barang.",
+    "errorPrefix": "MGUD"
+  },
+  "03-01-penjualan": {
+    "moduleId": "03-01-penjualan",
+    "moduleNameId": "Transaksi Penjualan",
+    "moduleNameEn": "Sales Transaction",
+    "delphiFile": "uTransaksiJual.pas",
+    "dbTables": ["JUAL", "JUALDET"],
+    "model": "JUAL",
+    "storeRequest": "StorePenjualanRequest",
+    "updateRequest": "UpdatePenjualanRequest",
+    "controller": "PenjualanController",
+    "navigationPath": "Transaksi > Penjualan",
+    "permissions": [
+      { "code": "TRX-001", "name": "Akses Transaksi Penjualan", "actions": "Lihat, Tambah, Edit, Hapus" },
+      { "code": "TRX-AUTH", "name": "Otorisasi Penjualan", "actions": "Menyetujui transaksi" }
+    ],
+    "masterData": [
+      { "table": "DBBARANG", "description": "Barang", "required": true },
+      { "table": "CUSTSUPP", "description": "Customer", "required": true },
+      { "table": "KARYAWAN", "description": "Salesman", "required": true }
+    ],
+    "prerequisiteModules": ["02-01-barang", "02-03-customer"],
+    "overview": "Modul Transaksi Penjualan digunakan untuk mencatat transaksi penjualan barang kepada pelanggan.",
+    "errorPrefix": "TPENJ",
+    "requiresAuthorization": true
+  },
+  "03-02-pembelian": {
+    "moduleId": "03-02-pembelian",
+    "moduleNameId": "Transaksi Pembelian",
+    "moduleNameEn": "Purchase Transaction",
+    "delphiFile": "uTransaksiBeli.pas",
+    "dbTables": ["BELI", "BELIDET"],
+    "model": "BELI",
+    "storeRequest": "StorePembelianRequest",
+    "updateRequest": "UpdatePembelianRequest",
+    "controller": "PembelianController",
+    "navigationPath": "Transaksi > Pembelian",
+    "permissions": [
+      { "code": "TRX-002", "name": "Akses Transaksi Pembelian", "actions": "Lihat, Tambah, Edit, Hapus" },
+      { "code": "TRX-AUTH", "name": "Otorisasi Pembelian", "actions": "Menyetujui transaksi" }
+    ],
+    "masterData": [
+      { "table": "DBBARANG", "description": "Barang", "required": true },
+      { "table": "CUSTSUPP", "description": "Supplier", "required": true }
+    ],
+    "prerequisiteModules": ["02-01-barang", "02-02-supplier"],
+    "overview": "Modul Transaksi Pembelian digunakan untuk mencatat transaksi pembelian barang dari supplier.",
+    "errorPrefix": "TPEMB",
+    "requiresAuthorization": true
+  }
+}
