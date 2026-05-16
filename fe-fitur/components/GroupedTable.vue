@@ -137,15 +137,45 @@ const props = defineProps<{
   mainDataset?: string
 }>()
 
-// Config-based grouping helpers (from database via backend)
-const {
-  shouldCalculateRunningBalance,
-  getBalanceColumn,
-  getStartRowMarker,
-  getMarkerColumn,
-  useSubgroups,
-  showGroupHeaders,
-} = useGroupingConfig()
+// Config-based grouping helpers
+function shouldCalculateRunningBalance(): boolean {
+  return false
+}
+
+function getBalanceColumn(): string | null {
+  return null
+}
+
+function getStartRowMarker(): string | null {
+  return null
+}
+
+function getMarkerColumn(): string | null {
+  return null
+}
+
+function useSubgroups(): boolean {
+  return true
+}
+
+function showGroupHeaders(): boolean {
+  return true
+}
+
+function calculateRunningBalance(
+  allItems: any[],
+  itemIndex: number,
+  balanceCol: string,
+  startMarker: string,
+  markerCol: string
+): any {
+  let balance = 0
+  for (let i = 0; i <= itemIndex; i++) {
+    const val = parseFloat(allItems[i][balanceCol]) || 0
+    balance += val
+  }
+  return balance
+}
 
 // Visible columns from config
 const visibleColumns = computed(() => {

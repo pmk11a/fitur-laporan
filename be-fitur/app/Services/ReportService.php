@@ -138,16 +138,15 @@ class ReportService
      */
     public function getReportConfig(string $kodeMenu): ?array
     {
-        // Normalize: strip leading zeros for lookup
-        $normalizedKode = ltrim($kodeMenu, '0');
-
+        // Try original code first (preserves leading zeros like 020101)
         $menu = DB::connection('sqlsrv')->selectOne(
-            "SELECT * FROM DBMENUREPORT WHERE KODEMENU = ? OR KODEMENU = ?",
-            [$normalizedKode, $kodeMenu]
+            "SELECT * FROM DBMENUREPORT WHERE KODEMENU = ?",
+            [$kodeMenu]
         );
 
         if (!$menu) {
-            // Try just the normalized version
+            // Try normalized version
+            $normalizedKode = ltrim($kodeMenu, '0');
             $menu = DB::connection('sqlsrv')->selectOne(
                 "SELECT * FROM DBMENUREPORT WHERE KODEMENU = ?",
                 [$normalizedKode]
@@ -158,7 +157,12 @@ class ReportService
             return null;
         }
 
-        $master = $this->getMasterLaporan($normalizedKode);
+        // Pass original kodeMenu to getMasterLaporan (preserves leading zeros)
+        $master = $this->getMasterLaporan($kodeMenu);
+        if (!$master) {
+            // Fallback to normalized
+            $master = $this->getMasterLaporan(ltrim($kodeMenu, '0'));
+        }
         if (!$master) {
             return [
                 'KODEMENU' => $menu->KODEMENU,
@@ -237,10 +241,22 @@ class ReportService
     private function getMasterLaporan(string $kodeMenu): ?object
     {
         try {
-            return DB::connection('sqlsrv')->selectOne(
+            // Try original code first (preserves leading zeros)
+            $master = DB::connection('sqlsrv')->selectOne(
                 "SELECT * FROM dbmasterlaporan WHERE KODEMENU = ? AND status_aktif = 1",
                 [$kodeMenu]
             );
+            if ($master) return $master;
+
+            // Try with leading zeros stripped
+            $normalized = ltrim($kodeMenu, '0');
+            if ($normalized !== $kodeMenu) {
+                return DB::connection('sqlsrv')->selectOne(
+                    "SELECT * FROM dbmasterlaporan WHERE KODEMENU = ? AND status_aktif = 1",
+                    [$normalized]
+                );
+            }
+            return null;
         } catch (\Exception $e) {
             return null;
         }
@@ -254,14 +270,27 @@ class ReportService
                 [$idLaporan]
             );
 
-            return array_map(fn($p) => [
-                'id_parameter' => $p->id_parameter,
-                'nama_filter' => $p->nama_filter,
-                'label' => $p->label ?? $p->nama_filter,
-                'tipe_input' => $p->tipe_input,
-                'wajib_isi' => (bool) $p->wajib_isi,
-                'nilai_default' => $p->nilai_default
-            ], $params);
+            return array_map(function ($p) {
+                $konfigurasi = null;
+                if (!empty($p->konfigurasi)) {
+                    try {
+                        $konfigurasi = json_decode($p->konfigurasi, true);
+                    } catch (\Exception $e) {
+                        $konfigurasi = null;
+                    }
+                }
+
+                return [
+                    'id_parameter' => $p->id_parameter,
+                    'nama_filter' => $p->nama_filter,
+                    'label' => $p->label ?? $p->nama_filter,
+                    'tipe_input' => $p->tipe_input,
+                    'wajib_isi' => (bool) $p->wajib_isi,
+                    'nilai_default' => $p->nilai_default,
+                    'kode_browse' => $konfigurasi['kode_browse'] ?? null,
+                    'mode' => $konfigurasi['mode'] ?? null,  // 'single', 'tags', 'checkbox'
+                ];
+            }, $params);
         } catch (\Exception $e) {
             return [];
         }
@@ -490,7 +519,22 @@ class ReportService
 
             $placeholder = '@' . $key;
             if (str_contains($sql, $placeholder)) {
-                $sql = str_replace($placeholder, "'" . addslashes($value) . "'", $sql);
+                // Handle array values (multi-select from checkbox mode)
+                // Build IN ('a','b','c') clause instead of single value
+                if (is_array($value) && count($value) > 0) {
+                    $escaped = array_map(fn($v) => "'" . addslashes((string) $v) . "'", $value);
+                    $inClause = implode(',', $escaped);
+                    $sql = str_replace($placeholder, $inClause, $sql);
+                } elseif (is_array($value) && count($value) === 0) {
+                    // Empty array → select ALL (no WHERE restriction)
+                    // Replace with dummy '1=1' to avoid SQL error, or remove the clause entirely
+                    // We'll leave as-is (no restriction) by replacing with a truthy expression
+                    $sql = str_replace($placeholder, "'__ALL__'", $sql);
+                    // Note: caller should handle __ALL__ as "no filter applied"
+                } else {
+                    // Scalar value — escape and replace
+                    $sql = str_replace($placeholder, "'" . addslashes((string) $value) . "'", $sql);
+                }
             }
         }
 

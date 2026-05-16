@@ -19,7 +19,7 @@ DELETE FROM dbparameterlaporan WHERE id_laporan = @IdLap;
 
 INSERT INTO dbparameterlaporan (id_laporan, nama_filter, label, tipe_input, wajib_isi, posisi, nilai_default)
 VALUES
-(@IdLap, 'Divisi', 'Devisi', 'dropdown', 1, 1, 'SEMUA'),
+(@IdLap, 'Divisi', 'Devisi', 'dropdown', 1, 1, '01'),
 (@IdLap, 'Bulan', 'Bulan', 'number', 1, 2, NULL),
 (@IdLap, 'Tahun', 'Tahun', 'number', 1, 3, NULL);
 
@@ -40,13 +40,15 @@ VALUES
 -- QuView3 (Aktiva)
 (@IdLap, 'QuView3', 'keterangan', 'Keterangan', 'text', 'left', 0, 1, 1),
 (@IdLap, 'QuView3', 'jumlah1', 'Jumlah', 'number', 'right', 1, 1, 2),
-(@IdLap, 'QuView3', 'grupAP1', 'Grup AP1', 'text', 'left', 0, 0, 3),
-(@IdLap, 'QuView3', 'grupAP2', 'Grup AP2', 'text', 'left', 0, 0, 4),
+(@IdLap, 'QuView3', 'jumlah2', 'Bulan Lalu', 'number', 'right', 1, 1, 3),
+(@IdLap, 'QuView3', 'grupAP1', 'Grup AP1', 'text', 'left', 0, 0, 4),
+(@IdLap, 'QuView3', 'grupAP2', 'Grup AP2', 'text', 'left', 0, 0, 5),
 -- QuView4 (Pasiva)
 (@IdLap, 'QuView4', 'keterangan', 'Keterangan', 'text', 'left', 0, 1, 1),
 (@IdLap, 'QuView4', 'jumlah1', 'Jumlah', 'number', 'right', 1, 1, 2),
-(@IdLap, 'QuView4', 'grupAP1', 'Grup AP1', 'text', 'left', 0, 0, 3),
-(@IdLap, 'QuView4', 'grupAP2', 'Grup AP2', 'text', 'left', 0, 0, 4);
+(@IdLap, 'QuView4', 'jumlah2', 'Bulan Lalu', 'number', 'right', 1, 1, 3),
+(@IdLap, 'QuView4', 'grupAP1', 'Grup AP1', 'text', 'left', 0, 0, 4),
+(@IdLap, 'QuView4', 'grupAP2', 'Grup AP2', 'text', 'left', 0, 0, 5);
 
 -- Step 5: Insert grouping configuration
 -- Note: dbgrouplaporan uses id_laporan + group_field (no dataset_name)

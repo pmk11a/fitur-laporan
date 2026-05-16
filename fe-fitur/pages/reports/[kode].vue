@@ -111,6 +111,7 @@
                 v-else-if="filter.type === 'browse'"
                 v-model="dynamicFilterValues[filter.id]"
                 :browse-type="filter.kode_browse || 'perkiraan'"
+                :mode="getFilterMode(filter)"
                 :placeholder="filter.label"
               />
 
@@ -119,6 +120,7 @@
                 v-else-if="filter.type === 'perkiraan'"
                 v-model="dynamicFilterValues[filter.id]"
                 browse-type="perkiraan"
+                mode="single"
                 :placeholder="filter.label"
               />
 
@@ -589,13 +591,31 @@ watch(() => reportStore.currentReport, () => {
 const effectiveFilters = computed(() => {
   // Use filters from dbmasterlaporan (dbparameterlaporan table)
   if (reportStore.currentReport?.filters?.length > 0) {
-    return reportStore.currentReport.filters.map((f: any) => ({
-      id: f.nama_filter,
-      label: f.label || f.nama_filter.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim(),
-      type: f.tipe_input || 'text',
-      required: f.wajib_isi,
-      defaultValue: f.nilai_default
-    }))
+    return reportStore.currentReport.filters.map((f: any) => {
+      // Backend already extracts kode_browse/mode to top-level
+      // But also handle legacy format where konfigurasi is JSON string
+      let kodeBrowse = f.kode_browse ?? null
+      let mode = f.mode ?? 'single'
+
+      // Legacy: parse konfigurasi JSON if kode_browse still null
+      if (kodeBrowse === null && f.konfigurasi) {
+        const konfigurasi = typeof f.konfigurasi === 'string'
+          ? JSON.parse(f.konfigurasi || '{}')
+          : (f.konfigurasi || {})
+        kodeBrowse = konfigurasi.kode_browse || null
+        mode = konfigurasi.mode || 'single'
+      }
+
+      return {
+        id: f.nama_filter,
+        label: f.label || f.nama_filter.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim(),
+        type: f.tipe_input || 'text',
+        required: f.wajib_isi,
+        defaultValue: f.nilai_default,
+        kode_browse: kodeBrowse,
+        mode: mode
+      }
+    })
   }
 
   // No filters in DB = no filter UI (matching Delphi -1 behavior)
@@ -754,4 +774,13 @@ function exportCSV(filename: string, data: any[]) {
 onUnmounted(() => {
   reportStore.clearReport()
 })
+
+// Get filter mode from filter config (driven by konfigurasi JSON in dbparameterlaporan)
+function getFilterMode(filter: any): 'single' | 'tags' | 'checkbox' {
+  // Mode can be set via filter.mode from dbparameterlaporan.konfigurasi JSON
+  // Default: 'single' for browse type
+  if (filter.mode === 'checkbox') return 'checkbox'
+  if (filter.mode === 'tags') return 'tags'
+  return 'single'
+}
 </script>

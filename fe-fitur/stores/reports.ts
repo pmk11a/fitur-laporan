@@ -313,6 +313,8 @@ export const useReportStore = defineStore('report', {
           this.groupedData = response.groupedData
           this.grandTotal = response.grandTotal || {}
           this.reportData = Object.values(response.datasets)[0] || []
+          // Update columns from config (for dynamic columns like jumlah2)
+          this.columns = response.config?.columns || {}
           // Store groupingConfig from database (no hardcoded patterns)
           this.groupingConfig = response.groupingConfig || null
 
