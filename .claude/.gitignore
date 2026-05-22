@@ -1,6 +1,13 @@
-# Claude Code Memory & Context
-.claude/memory/
-.claude/context-store/
+# ================================================
+# Sub .gitignore - Khusus Folder .claude
+# ================================================
 
-# Except keep the structure
-!.claude/memory/MEMORY.md
+# 1. Abaikan TOTAL semua file dan folder di dalam .claude/
+*
+
+# 2. PENGECUALIAN: Jangan abaikan file .gitignore ini sendiri
+!.gitignore
+
+# 3. PENGECUALIAN: Tetap izinkan folder memory dan file MEMORY.md
+!memory/
+!memory/MEMORY.md
