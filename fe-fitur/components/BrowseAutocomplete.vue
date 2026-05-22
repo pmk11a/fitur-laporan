@@ -267,8 +267,8 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
 })
 
-onMounted(() => {
-  browseConfig.value = config.getConfig(props.browseType)
+onMounted(async () => {
+  browseConfig.value = await config.getConfig(props.browseType)
 })
 
 const emit = defineEmits<{
@@ -331,16 +331,80 @@ watch(
 const config = useBrowseConfig()
 const browseConfig = ref<{ keyField: string; labelField: string } | null>(null)
 
+// Fallback field map based on BrowseService.php config
+const knownFieldMap: Record<string, { keyField: string; labelField: string }> = {
+  '10051': { keyField: 'Perkiraan', labelField: 'Keterangan' },
+  '1005': { keyField: 'Perkiraan', labelField: 'Keterangan' },
+  '100444': { keyField: 'Perkiraan', labelField: 'Keterangan' },
+  '10053': { keyField: 'Perkiraan', labelField: 'Keterangan' },
+  '10054': { keyField: 'Nomor', labelField: 'Keterangan' },
+  '10055': { keyField: 'Perkiraan', labelField: 'Keterangan' },
+  '10059': { keyField: 'Perkiraan', labelField: 'Keterangan' },
+  'perkiraan': { keyField: 'Perkiraan', labelField: 'Keterangan' },
+  '10141': { keyField: 'KodeCustSupp', labelField: 'NamaCustSupp' },
+  '10142': { keyField: 'KodeCustSupp', labelField: 'NamaCustSupp' },
+  '10143': { keyField: 'KodeCustSupp', labelField: 'NamaCustSupp' },
+  '1014': { keyField: 'KodeCustSupp', labelField: 'NamaCustSupp' },
+  '911': { keyField: 'KodeBrg', labelField: 'NamaBrg' },
+  '912': { keyField: 'KodeBrg', labelField: 'NamaBrg' },
+  '913': { keyField: 'KodeBrg', labelField: 'NamaBrg' },
+  '914': { keyField: 'Lokasi', labelField: 'Lokasi' },
+  '915': { keyField: 'KodeBrg', labelField: 'NamaBrg' },
+  '917': { keyField: 'KodeBrg', labelField: 'NamaBrg' },
+  '120302': { keyField: 'KodeBrg', labelField: 'NamaBrg' },
+  '3001101': { keyField: 'KodeBrg', labelField: 'NamaBrg' },
+  '916': { keyField: 'KodeGdg', labelField: 'Nama' },
+  '11002': { keyField: 'KodeGdg', labelField: 'Nama' },
+  '11009': { keyField: 'KodeGdg', labelField: 'Nama' },
+  '1004': { keyField: 'Devisi', labelField: 'NamaDevisi' },
+  '11011': { keyField: 'KodeKota', labelField: 'NamaKota' },
+  '110011': { keyField: 'KodeSubGrp', labelField: 'NamaSubGrp' },
+  '1100112': { keyField: 'KodeGrp', labelField: 'Nama' },
+  '110012': { keyField: 'KodeGrp', labelField: 'Nama' },
+  '110013': { keyField: 'KodeGrp', labelField: 'Nama' },
+  '110014': { keyField: 'KodeSubGrp', labelField: 'NamaSubGrp' },
+  '157': { keyField: 'KodeSubGrp', labelField: 'NamaSubGrp' },
+  '1576': { keyField: 'KeyNIK', labelField: 'Nama' },
+  '1577': { keyField: 'NIK', labelField: 'Nama' },
+  '15779': { keyField: 'NIK', labelField: 'Nama' },
+  '15780': { keyField: 'NIK', labelField: 'Nama' },
+  '100413': { keyField: 'NoMuka', labelField: 'Keterangan' },
+  '100412': { keyField: 'NoMuka', labelField: 'Keterangan' },
+  '100405': { keyField: 'NoGiro', labelField: 'Bank' },
+  '100406': { keyField: 'NoGiro', labelField: 'Bank' },
+  '1006': { keyField: 'KodeVls', labelField: 'NamaVls' },
+  '11001': { keyField: 'KodeVls', labelField: 'NamaVls' },
+  '2082': { keyField: 'KodeVls', labelField: 'NamaVls' },
+  '1008': { keyField: 'KodeKategori', labelField: 'Keterangan' },
+  '10081': { keyField: 'KodeKategori', labelField: 'Keterangan' },
+  '1007': { keyField: 'Kodeak', labelField: 'Namaak' },
+  '10071': { keyField: 'Kodesubak', labelField: 'Namasubak' },
+  '1002': { keyField: 'KodeBag', labelField: 'Namabag' },
+  '10021': { keyField: 'KdDep', labelField: 'NmDep' },
+  '1003': { keyField: 'KodeJab', labelField: 'Namajab' },
+  '251050': { keyField: 'KodeTipe', labelField: 'Nama' },
+  '30056': { keyField: 'KodeTipe', labelField: 'Nama' },
+  '30057': { keyField: 'KodeTipe', labelField: 'Nama' },
+  '110015': { keyField: 'KodeJnsTambahkan', labelField: 'Nama' },
+  '110016': { keyField: 'KodeBrg', labelField: 'NamaBrg' },
+  '1250': { keyField: 'KodeExp', labelField: 'NamaExp' },
+  '91117': { keyField: 'NOSPK', labelField: 'KodeBrg' },
+}
+
 onMounted(async () => {
   browseConfig.value = await config.getConfig(props.browseType)
 })
 
 function getKeyField(): string {
-  return browseConfig.value?.keyField || 'Perkiraan'
+  if (browseConfig.value) return browseConfig.value.keyField
+  // Fallback to known config before API resolves
+  return knownFieldMap[props.browseType]?.keyField || 'Perkiraan'
 }
 
 function getLabelField(): string {
-  return browseConfig.value?.labelField || 'Keterangan'
+  if (browseConfig.value) return browseConfig.value.labelField
+  // Fallback to known config before API resolves
+  return knownFieldMap[props.browseType]?.labelField || 'Keterangan'
 }
 
 function getKey(item: Record<string, any>): string {

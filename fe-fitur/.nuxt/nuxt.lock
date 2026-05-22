@@ -1,9 +1,9 @@
 {
-  "pid": 18988,
-  "startedAt": 1778469776443,
+  "pid": 10840,
+  "startedAt": 1778921060965,
   "command": "dev",
   "cwd": "D:/TestLaB/Fitur/fe-fitur",
-  "port": 3001,
+  "port": 3000,
   "hostname": "::1",
-  "url": "http://[::1]:3001"
+  "url": "http://[::1]:3000"
 }

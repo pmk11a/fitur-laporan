@@ -15,6 +15,7 @@ public/storage/
 storage/*.key
 storage/pail/
 /vendor
+.nuxt/
 
 # --- Environment (.env BUKAN .env.example) ---
 .env

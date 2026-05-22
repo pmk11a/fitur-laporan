@@ -100,15 +100,19 @@ declare global {
   const unref: typeof import('vue').unref
   const updateAppConfig: typeof import('../../node_modules/nuxt/dist/app/config').updateAppConfig
   const useActiveApi: typeof import('../../composables/useApiConfig').useActiveApi
+  const useAdminReportStore: typeof import('../../stores/adminReports').useAdminReportStore
   const useAppConfig: typeof import('../../node_modules/nuxt/dist/app/config').useAppConfig
   const useAsyncData: typeof import('../../node_modules/nuxt/dist/app/composables/asyncData').useAsyncData
   const useAttrs: typeof import('vue').useAttrs
   const useAuthStore: typeof import('../../stores/auth').useAuthStore
+  const useBrowseConfig: typeof import('../../composables/useBrowseConfig').useBrowseConfig
+  const useBrowseSearch: typeof import('../../composables/useBrowseSearch').useBrowseSearch
   const useCookie: typeof import('../../node_modules/nuxt/dist/app/composables/cookie').useCookie
   const useCssModule: typeof import('vue').useCssModule
   const useCssVars: typeof import('vue').useCssVars
   const useError: typeof import('../../node_modules/nuxt/dist/app/composables/error').useError
   const useFetch: typeof import('../../node_modules/nuxt/dist/app/composables/fetch').useFetch
+  const useGroupingConfig: typeof import('../../composables/useGroupingConfig').useGroupingConfig
   const useHead: typeof import('../../node_modules/nuxt/dist/app/composables/head').useHead
   const useHeadSafe: typeof import('../../node_modules/nuxt/dist/app/composables/head').useHeadSafe
   const useHydration: typeof import('../../node_modules/nuxt/dist/app/composables/hydrate').useHydration
@@ -202,6 +206,15 @@ declare global {
   // @ts-ignore
   export type { ApiConfig, KeuLoginResponse, FiturLoginResponse, UnifiedUser } from '../../composables/useApiConfig'
   import('../../composables/useApiConfig')
+  // @ts-ignore
+  export type { BrowseConfig } from '../../composables/useBrowseConfig'
+  import('../../composables/useBrowseConfig')
+  // @ts-ignore
+  export type { BrowseSearchResult } from '../../composables/useBrowseSearch'
+  import('../../composables/useBrowseSearch')
+  // @ts-ignore
+  export type { AdminReport, AdminFilter, AdminDataset, AdminColumn, AdminGroup, AdminUserAccess, AdminUser, AdminKodeMenu } from '../../stores/adminReports'
+  import('../../stores/adminReports')
   // @ts-ignore
   export type { User } from '../../stores/auth'
   import('../../stores/auth')
@@ -312,15 +325,19 @@ declare module 'vue' {
     readonly unref: UnwrapRef<typeof import('vue')['unref']>
     readonly updateAppConfig: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/config')['updateAppConfig']>
     readonly useActiveApi: UnwrapRef<typeof import('../../composables/useApiConfig')['useActiveApi']>
+    readonly useAdminReportStore: UnwrapRef<typeof import('../../stores/adminReports')['useAdminReportStore']>
     readonly useAppConfig: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/config')['useAppConfig']>
     readonly useAsyncData: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/asyncData')['useAsyncData']>
     readonly useAttrs: UnwrapRef<typeof import('vue')['useAttrs']>
     readonly useAuthStore: UnwrapRef<typeof import('../../stores/auth')['useAuthStore']>
+    readonly useBrowseConfig: UnwrapRef<typeof import('../../composables/useBrowseConfig')['useBrowseConfig']>
+    readonly useBrowseSearch: UnwrapRef<typeof import('../../composables/useBrowseSearch')['useBrowseSearch']>
     readonly useCookie: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/cookie')['useCookie']>
     readonly useCssModule: UnwrapRef<typeof import('vue')['useCssModule']>
     readonly useCssVars: UnwrapRef<typeof import('vue')['useCssVars']>
     readonly useError: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/error')['useError']>
     readonly useFetch: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/fetch')['useFetch']>
+    readonly useGroupingConfig: UnwrapRef<typeof import('../../composables/useGroupingConfig')['useGroupingConfig']>
     readonly useHead: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/head')['useHead']>
     readonly useHeadSafe: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/head')['useHeadSafe']>
     readonly useHydration: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/hydrate')['useHydration']>

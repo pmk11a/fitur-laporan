@@ -248,6 +248,13 @@ export const useAuthStore = defineStore('auth', {
 
       // Check permissions array
       return this.permissions.includes(String(accessCode))
+    },
+
+    /**
+     * Get authorization headers for API calls
+     */
+    get authHeaders(): Record<string, string> {
+      return this.token ? { Authorization: `Bearer ${this.token}` } : {}
     }
   }
 })

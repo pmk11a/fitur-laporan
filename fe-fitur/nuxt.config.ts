@@ -7,6 +7,10 @@ export default defineNuxtConfig({
     '@pinia/nuxt',
   ],
 
+  components: {
+    dirs: ['components']
+  },
+
   css: ['~/assets/css/main.css'],
 
   app: {

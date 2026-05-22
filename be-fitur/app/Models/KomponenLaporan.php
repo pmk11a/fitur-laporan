@@ -14,7 +14,8 @@ class KomponenLaporan extends Model
         'id_laporan',
         'tipe_band',
         'konfigurasi_layout',
-        'urutan_tampil'
+        'urutan_tampil',
+        'deskripsi'
     ];
 
     protected $casts = [

@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\MenuController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\BrowseController;
+use App\Http\Controllers\AdminReportController;
 
 /*
 |--------------------------------------------------------------------------
@@ -37,4 +38,51 @@ Route::prefix('reports')->group(function () {
     Route::get('/perkiraan/search', [ReportController::class, 'searchPerkiraan']);
     Route::get('/{kodeMenu}', [ReportController::class, 'show']);
     Route::post('/{kodeMenu}/preview', [ReportController::class, 'preview']);
+});
+
+// Admin routes — auth (userId dari query/body) + admin role check
+Route::prefix('admin')->middleware(['auth', 'admin'])->group(function () {
+    // Reports CRUD
+    Route::get('/reports', [AdminReportController::class, 'index']);
+    Route::post('/reports', [AdminReportController::class, 'store']);
+    Route::get('/reports/available-kodemenu', [AdminReportController::class, 'availableKodeMenu']);
+    Route::get('/reports/{id}', [AdminReportController::class, 'show']);
+    Route::put('/reports/{id}', [AdminReportController::class, 'update']);
+    Route::delete('/reports/{id}', [AdminReportController::class, 'destroy']);
+
+    // Filters
+    Route::get('/reports/{id}/filters', [AdminReportController::class, 'listFilters']);
+    Route::post('/reports/{id}/filters', [AdminReportController::class, 'storeFilter']);
+    Route::put('/reports/{id}/filters/{fid}', [AdminReportController::class, 'updateFilter']);
+    Route::delete('/reports/{id}/filters/{fid}', [AdminReportController::class, 'destroyFilter']);
+    Route::patch('/reports/{id}/filters/reorder', [AdminReportController::class, 'reorderFilters']);
+
+    // Datasets
+    Route::get('/reports/{id}/datasets', [AdminReportController::class, 'listDatasets']);
+    Route::post('/reports/{id}/datasets', [AdminReportController::class, 'storeDataset']);
+    Route::put('/reports/{id}/datasets/{did}', [AdminReportController::class, 'updateDataset']);
+    Route::delete('/reports/{id}/datasets/{did}', [AdminReportController::class, 'destroyDataset']);
+    Route::post('/reports/{id}/datasets/preview', [AdminReportController::class, 'previewDataset']);
+
+    // Columns
+    Route::get('/reports/{id}/columns', [AdminReportController::class, 'listColumns']);
+    Route::post('/reports/{id}/columns', [AdminReportController::class, 'storeColumn']);
+    Route::put('/reports/{id}/columns/{cid}', [AdminReportController::class, 'updateColumn']);
+    Route::delete('/reports/{id}/columns/{cid}', [AdminReportController::class, 'destroyColumn']);
+
+    // Groups
+    Route::get('/reports/{id}/groups', [AdminReportController::class, 'listGroups']);
+    Route::post('/reports/{id}/groups', [AdminReportController::class, 'storeGroup']);
+    Route::put('/reports/{id}/groups/{gid}', [AdminReportController::class, 'updateGroup']);
+    Route::delete('/reports/{id}/groups/{gid}', [AdminReportController::class, 'destroyGroup']);
+
+    // Menu items
+    Route::get('/menu-items', [AdminReportController::class, 'listMenuItems']);
+    Route::put('/menu-items/{kodeMenu}', [AdminReportController::class, 'updateMenuItem']);
+
+    // User access
+    Route::get('/reports/{id}/access', [AdminReportController::class, 'listAccess']);
+    Route::post('/reports/{id}/access', [AdminReportController::class, 'grantAccess']);
+    Route::delete('/reports/{id}/access/{userId}', [AdminReportController::class, 'revokeAccess']);
+    Route::get('/users', [AdminReportController::class, 'listUsers']);
 });

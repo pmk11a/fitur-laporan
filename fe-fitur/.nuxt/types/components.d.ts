@@ -14,11 +14,18 @@ type HydrationStrategies = {
 type LazyComponent<T> = DefineComponent<HydrationStrategies, {}, {}, {}, {}, {}, {}, { hydrated: () => void }> & T
 
 interface _GlobalComponents {
+  BrowseAutocomplete: typeof import("../../components/BrowseAutocomplete.vue")['default']
   GroupedTable: typeof import("../../components/GroupedTable.vue")['default']
   MenuItem: typeof import("../../components/MenuItem.vue")['default']
   PerkiraanAutocomplete: typeof import("../../components/PerkiraanAutocomplete.vue")['default']
   Sidebar: typeof import("../../components/Sidebar.vue")['default']
   TopBar: typeof import("../../components/TopBar.vue")['default']
+  AdminTabsColumnsTab: typeof import("../../components/admin/tabs/ColumnsTab.vue")['default']
+  AdminTabsDatasetsTab: typeof import("../../components/admin/tabs/DatasetsTab.vue")['default']
+  AdminTabsFiltersTab: typeof import("../../components/admin/tabs/FiltersTab.vue")['default']
+  AdminTabsGeneralTab: typeof import("../../components/admin/tabs/GeneralTab.vue")['default']
+  AdminTabsGroupingTab: typeof import("../../components/admin/tabs/GroupingTab.vue")['default']
+  AdminTabsUserAccessTab: typeof import("../../components/admin/tabs/UserAccessTab.vue")['default']
   NuxtWelcome: typeof import("../../node_modules/nuxt/dist/app/components/welcome.vue")['default']
   NuxtLayout: typeof import("../../node_modules/nuxt/dist/app/components/nuxt-layout")['default']
   NuxtErrorBoundary: typeof import("../../node_modules/nuxt/dist/app/components/nuxt-error-boundary.vue")['default']
@@ -42,11 +49,18 @@ interface _GlobalComponents {
   Html: typeof import("../../node_modules/nuxt/dist/head/runtime/components")['Html']
   Body: typeof import("../../node_modules/nuxt/dist/head/runtime/components")['Body']
   NuxtIsland: typeof import("../../node_modules/nuxt/dist/app/components/nuxt-island")['default']
+  LazyBrowseAutocomplete: LazyComponent<typeof import("../../components/BrowseAutocomplete.vue")['default']>
   LazyGroupedTable: LazyComponent<typeof import("../../components/GroupedTable.vue")['default']>
   LazyMenuItem: LazyComponent<typeof import("../../components/MenuItem.vue")['default']>
   LazyPerkiraanAutocomplete: LazyComponent<typeof import("../../components/PerkiraanAutocomplete.vue")['default']>
   LazySidebar: LazyComponent<typeof import("../../components/Sidebar.vue")['default']>
   LazyTopBar: LazyComponent<typeof import("../../components/TopBar.vue")['default']>
+  LazyAdminTabsColumnsTab: LazyComponent<typeof import("../../components/admin/tabs/ColumnsTab.vue")['default']>
+  LazyAdminTabsDatasetsTab: LazyComponent<typeof import("../../components/admin/tabs/DatasetsTab.vue")['default']>
+  LazyAdminTabsFiltersTab: LazyComponent<typeof import("../../components/admin/tabs/FiltersTab.vue")['default']>
+  LazyAdminTabsGeneralTab: LazyComponent<typeof import("../../components/admin/tabs/GeneralTab.vue")['default']>
+  LazyAdminTabsGroupingTab: LazyComponent<typeof import("../../components/admin/tabs/GroupingTab.vue")['default']>
+  LazyAdminTabsUserAccessTab: LazyComponent<typeof import("../../components/admin/tabs/UserAccessTab.vue")['default']>
   LazyNuxtWelcome: LazyComponent<typeof import("../../node_modules/nuxt/dist/app/components/welcome.vue")['default']>
   LazyNuxtLayout: LazyComponent<typeof import("../../node_modules/nuxt/dist/app/components/nuxt-layout")['default']>
   LazyNuxtErrorBoundary: LazyComponent<typeof import("../../node_modules/nuxt/dist/app/components/nuxt-error-boundary.vue")['default']>

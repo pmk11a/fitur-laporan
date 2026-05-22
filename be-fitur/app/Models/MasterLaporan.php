@@ -3,10 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class MasterLaporan extends Model
 {
-    protected $table = 'MASTER_LAPORAN';
+    protected $table = 'dbmasterlaporan';
     protected $primaryKey = 'id_laporan';
     public $timestamps = false;
 
@@ -21,30 +22,30 @@ class MasterLaporan extends Model
 
     protected $casts = [
         'status_aktif' => 'boolean',
-        'footer_bands' => 'array'
+        'footer_bands' => 'array',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
-    /**
-     * Get components
-     */
-    public function komponen()
+    protected static function boot()
     {
-        return $this->hasMany(KomponenLaporan::class, 'id_laporan', 'id_laporan')
-            ->orderBy('urutan_tampil');
+        parent::boot();
+
+        static::deleting(function (MasterLaporan $report) {
+            $id = $report->id_laporan;
+            DB::connection('sqlsrv')->table('dbparameterlaporan')->where('id_laporan', $id)->delete();
+            DB::connection('sqlsrv')->table('dbquerylaporan')->where('id_laporan', $id)->delete();
+            DB::connection('sqlsrv')->table('dbkolomlaporan')->where('id_laporan', $id)->delete();
+            DB::connection('sqlsrv')->table('dbgrouplaporan')->where('id_laporan', $id)->delete();
+        });
     }
 
-    /**
-     * Get parameters
-     */
     public function parameters()
     {
         return $this->hasMany(ParameterLaporan::class, 'id_laporan', 'id_laporan')
-            ->orderBy('id_parameter');
+            ->orderBy('posisi');
     }
 
-    /**
-     * Get parent menu
-     */
     public function menu()
     {
         return $this->belongsTo(DBMENUREPORT::class, 'KODEMENU', 'KODEMENU');

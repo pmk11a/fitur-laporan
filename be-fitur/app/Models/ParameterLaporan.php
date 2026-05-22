@@ -13,13 +13,18 @@ class ParameterLaporan extends Model
     protected $fillable = [
         'id_laporan',
         'nama_filter',
+        'label',
         'tipe_input',
         'wajib_isi',
-        'nilai_default'
+        'nilai_default',
+        'posisi',
+        'konfigurasi',
+        'deskripsi'
     ];
 
     protected $casts = [
-        'wajib_isi' => 'boolean'
+        'wajib_isi' => 'boolean',
+        'posisi' => 'integer',
     ];
 
     /**
