@@ -55,6 +55,10 @@ export interface DatasetConfig {
   nama_dataset: string
   deskripsi: string
   urutan: number
+  config_json?: {
+    display_role?: 'summary' | 'detail'
+    summary_layout?: 'grid_2col' | 'grid_1col'
+  }
 }
 
 /**

@@ -15,11 +15,13 @@ class DBQueryLaporan extends Model
         'nama_dataset',
         'query_sumber_data',
         'deskripsi',
-        'urutan'
+        'urutan',
+        'config_json'
     ];
 
     protected $casts = [
-        'urutan' => 'integer'
+        'urutan' => 'integer',
+        'config_json' => 'array',
     ];
 
     public function master()

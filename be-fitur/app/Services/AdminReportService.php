@@ -199,6 +199,7 @@ class AdminReportService
             'deskripsi' => $d->deskripsi,
             'query_sumber_data' => $d->query_sumber_data,
             'urutan' => $d->urutan,
+            'config_json' => json_decode($d->config_json ?? '{}', true),
         ], $datasets);
     }
 
@@ -216,9 +217,20 @@ class AdminReportService
             'query_sumber_data' => $data['query_sumber_data'],
             'deskripsi' => $data['deskripsi'] ?? null,
             'urutan' => $data['urutan'] ?? $urutan,
+            'config_json' => isset($data['config_json']) && $data['config_json']
+                ? json_encode($data['config_json'])
+                : null,
         ]);
 
-        return ['id_query' => $id, 'id_laporan' => $idLaporan, ...$data];
+        return [
+            'id_query' => $id,
+            'id_laporan' => $idLaporan,
+            'nama_dataset' => $data['nama_dataset'],
+            'query_sumber_data' => $data['query_sumber_data'],
+            'deskripsi' => $data['deskripsi'] ?? null,
+            'urutan' => $data['urutan'] ?? $urutan,
+            'config_json' => $data['config_json'] ?? null,
+        ];
     }
 
     public function updateDataset(int $id, array $data): bool
@@ -229,6 +241,12 @@ class AdminReportService
             'deskripsi' => $data['deskripsi'] ?? null,
             'urutan' => $data['urutan'] ?? null,
         ], fn($v) => $v !== null);
+
+        if (isset($data['config_json'])) {
+            $update['config_json'] = $data['config_json']
+                ? json_encode($data['config_json'])
+                : null;
+        }
 
         return DB::connection('sqlsrv')->table('dbquerylaporan')
             ->where('id_query', $id)->update($update) > 0;

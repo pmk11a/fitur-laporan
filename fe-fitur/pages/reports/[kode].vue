@@ -209,8 +209,8 @@
           <!-- Data Table - Generic Multi-Dataset Support -->
           <div class="overflow-x-auto">
             <!-- Special 2-Column Layout for Neraca (20503) - Aktiva & Pasiva side-by-side -->
-            <div v-if="allReportDatasets.length === 2" class="grid grid-cols-2 gap-6">
-              <div v-for="(dataset, dsIndex) in allReportDatasets" :key="dataset.nama_dataset">
+            <div v-if="detailDatasets.length === 2" class="grid grid-cols-2 gap-6">
+              <div v-for="(dataset, dsIndex) in detailDatasets" :key="dataset.nama_dataset">
 
                 <!-- Dataset Section Header -->
                 <div class="px-4 py-2 bg-secondary-100 border rounded-t-lg flex items-center justify-between">
@@ -266,7 +266,7 @@
 
             <!-- Standard Layout for other reports (stacked) -->
             <div v-else>
-              <div v-for="(dataset, dsIndex) in allReportDatasets" :key="dataset.nama_dataset" class="mb-6 last:mb-0">
+              <div v-for="(dataset, dsIndex) in detailDatasets" :key="dataset.nama_dataset" class="mb-6 last:mb-0">
 
                 <!-- Dataset Section Header -->
                 <div class="px-6 py-3 bg-secondary-100 border-b flex items-center justify-between">
@@ -330,9 +330,9 @@
             </div>
           </div>
 
-          <!-- T1 Summary Section - 2 Column Layout (database-driven) -->
+          <!-- T1 Summary Section - Dynamic Column Layout from config_json -->
           <div v-if="t1SummaryData" class="mt-4 border-t-2 border-secondary-300 pt-4 bg-secondary-50">
-            <div class="grid grid-cols-2 gap-6">
+            <div :class="`grid grid-cols-${summaryColumnCount} gap-6`">
               <!-- Left Column: Cash Details -->
               <div>
                 <table class="w-full text-sm">
@@ -411,39 +411,25 @@ const accessCode = computed(() => {
 // Get headers and column config from columns definition
 // For multi-dataset reports (like Kas Harian), use T2 for detail/transactions
 const reportHeaders = computed(() => {
-  // For multi-dataset reports, check if T2 exists
-  if (reportStore.currentReport?.columns?.['T2']) {
-    const cols = reportStore.currentReport.columns['T2']
+  // Use first detail dataset
+  const firstDetail = detailDatasets.value[0]?.nama_dataset
+  if (firstDetail && reportStore.currentReport?.columns?.[firstDetail]) {
+    const cols = reportStore.currentReport.columns[firstDetail]
     return cols.filter(c => c.is_visible !== false).map(c => c.nama_kolom)
   }
-  // For single-dataset reports, use first dataset
-  if (reportStore.currentReport?.columns) {
-    const mainDataset = reportStore.currentReport.datasets?.[0]?.nama_dataset || 'Daftar Perkiraan'
-    const cols = reportStore.currentReport.columns[mainDataset] || []
-    if (cols.length > 0) {
-      return cols.filter(c => c.is_visible !== false).map(c => c.nama_kolom)
-    }
-  }
   // Fallback to data keys
-  const data = reportStore.datasets['T2'] || reportStore.reportData
+  const data = reportStore.reportData
   if (!data?.length) return []
   return Object.keys(data[0])
 })
 
 // Get column labels for display
 const columnLabels = computed(() => {
-  // For multi-dataset reports, use T2 columns
-  if (reportStore.currentReport?.columns?.['T2']) {
-    const cols = reportStore.currentReport.columns['T2']
+  // Use first detail dataset
+  const firstDetail = detailDatasets.value[0]?.nama_dataset
+  if (firstDetail && reportStore.currentReport?.columns?.[firstDetail]) {
+    const cols = reportStore.currentReport.columns[firstDetail]
     return cols.filter(c => c.is_visible !== false).map(c => c.label_tampil || c.nama_kolom)
-  }
-  // For single-dataset reports
-  if (reportStore.currentReport?.columns) {
-    const mainDataset = reportStore.currentReport.datasets?.[0]?.nama_dataset || 'Daftar Perkiraan'
-    const cols = reportStore.currentReport.columns[mainDataset] || []
-    if (cols.length > 0) {
-      return cols.filter(c => c.is_visible !== false).map(c => c.label_tampil || c.nama_kolom)
-    }
   }
   return reportHeaders.value
 })
@@ -451,8 +437,13 @@ const columnLabels = computed(() => {
 // T1 Summary Data (for multi-dataset reports like Kas Harian)
 // Include calculated fields from T2 transactions (mimics .fr3 FastReport script)
 const t1SummaryData = computed(() => {
-  const t1 = reportStore.datasets['T1']
-  const t2 = reportStore.datasets['T2']
+  const sumName = summaryDatasetName.value
+  const detName = detailDatasets.value[0]?.nama_dataset
+
+  if (!sumName) return null
+
+  const t1 = reportStore.datasets[sumName]
+  const t2 = detName ? reportStore.datasets[detName] : null
   if (!t1 || t1.length === 0) return null
 
   const data = { ...t1[0] }
@@ -499,10 +490,11 @@ const t1SummaryData = computed(() => {
   return data
 })
 
-// Get T1 column labels for summary display
+// Get summary dataset column labels for summary display
 const t1Labels = computed(() => {
-  if (reportStore.currentReport?.columns?.['T1']) {
-    const cols = reportStore.currentReport.columns['T1']
+  if (!summaryDatasetName.value) return {}
+  if (reportStore.currentReport?.columns?.[summaryDatasetName.value]) {
+    const cols = reportStore.currentReport.columns[summaryDatasetName.value]
     const labelMap: Record<string, string> = {}
     cols.forEach((c: any) => {
       labelMap[c.nama_kolom] = c.label_tampil || c.nama_kolom
@@ -512,17 +504,18 @@ const t1Labels = computed(() => {
   return {}
 })
 
-// T1 Left Column Fields (kas details: Tunai, Giro, Bon, etc.)
+// Summary Left Column Fields (kas details: Tunai, Giro, Bon, etc.)
 const t1LeftFields = computed(() => {
-  if (!reportStore.currentReport?.columns?.['T1']) return []
-  // Use all T1 columns for left section (saldo details)
-  return reportStore.currentReport.columns['T1']
+  if (!summaryDatasetName.value) return []
+  if (!reportStore.currentReport?.columns?.[summaryDatasetName.value]) return []
+  return reportStore.currentReport.columns[summaryDatasetName.value]
     .map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom }))
 })
 
-// T1 Right Column Fields (totals from SP)
+// Summary Right Column Fields (totals from SP)
 const t1RightFields = computed(() => {
-  if (!reportStore.currentReport?.columns?.['T1']) return []
+  if (!summaryDatasetName.value) return []
+  if (!reportStore.currentReport?.columns?.[summaryDatasetName.value]) return []
   // T1 from SP has: SaldoAwalD, SaldoAkhirD, TotalD (computed values)
   return [
     { key: 'TotalD', label: 'Total' },
@@ -623,6 +616,26 @@ const effectiveFilters = computed(() => {
 })
 
 // ===== Generic Multi-Dataset Support =====
+// Summary dataset — driven by config_json.display_role, not hardcoded 'T1'
+const summaryDatasetName = computed(() => {
+  const datasets = reportStore.currentReport?.datasets || []
+  const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary')
+  return summaryDs?.nama_dataset || null
+})
+
+// Detail datasets — all datasets that are NOT summary
+const detailDatasets = computed(() => {
+  const datasets = reportStore.currentReport?.datasets || []
+  return datasets.filter((d: any) => d.config_json?.display_role !== 'summary')
+})
+
+// Number of columns for summary section (from config_json.summary_layout)
+const summaryColumnCount = computed(() => {
+  const datasets = reportStore.currentReport?.datasets || []
+  const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary')
+  return summaryDs?.config_json?.summary_layout === 'grid_1col' ? 1 : 2
+})
+
 const allReportDatasets = computed(() => {
   return reportStore.currentReport?.datasets || []
 })

@@ -162,6 +162,9 @@ class AdminReportController extends Controller
             'query_sumber_data' => 'required|string',
             'deskripsi' => 'nullable|string|max:200',
             'urutan' => 'nullable|integer',
+            'config_json' => 'nullable|array',
+            'config_json.display_role' => 'nullable|string|in:summary,detail',
+            'config_json.summary_layout' => 'nullable|string|in:grid_2col,grid_1col',
         ]);
 
         $result = $this->service->createDataset($id, $data);
@@ -176,6 +179,9 @@ class AdminReportController extends Controller
             'query_sumber_data' => 'nullable|string',
             'deskripsi' => 'nullable|string|max:200',
             'urutan' => 'nullable|integer',
+            'config_json' => 'nullable|array',
+            'config_json.display_role' => 'nullable|string|in:summary,detail',
+            'config_json.summary_layout' => 'nullable|string|in:grid_2col,grid_1col',
         ]);
 
         $this->service->updateDataset($did, $data);

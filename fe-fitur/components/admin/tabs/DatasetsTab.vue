@@ -15,8 +15,14 @@
       <div v-for="ds in store.selectedReportData.datasets" :key="ds.id_query" class="card p-4">
         <div class="flex items-start justify-between gap-4">
           <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1">
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
               <span class="px-2 py-0.5 bg-primary-50 text-primary-600 rounded text-xs font-mono font-medium">{{ ds.nama_dataset }}</span>
+              <span v-if="ds.config_json?.display_role === 'summary'" class="px-2 py-0.5 bg-yellow-50 text-yellow-600 rounded text-xs border border-yellow-200">
+                Summary
+                <span v-if="ds.config_json?.summary_layout === 'grid_1col'" class="ml-1">1 kolom</span>
+                <span v-else class="ml-1">2 kolom</span>
+              </span>
+              <span v-else-if="ds.config_json?.display_role === 'detail'" class="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs">Detail</span>
               <span class="text-xs text-secondary-400">Urutan: {{ ds.urutan }}</span>
             </div>
             <p v-if="ds.deskripsi" class="text-xs text-secondary-500 mb-2">{{ ds.deskripsi }}</p>
@@ -74,6 +80,24 @@
             <div>
               <label class="block text-sm font-medium text-secondary-700 mb-1">Deskripsi</label>
               <input v-model="form.deskripsi" type="text" class="input-field" placeholder="Deskripsi dataset" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-secondary-700 mb-1">Display Role</label>
+                <select v-model="form.config_json.display_role" class="input-field">
+                  <option value="">— Tidak diatur —</option>
+                  <option value="summary">Summary (tampil di footer, bukan tabel)</option>
+                  <option value="detail">Detail (tampil di tabel transaksi)</option>
+                </select>
+              </div>
+              <div v-if="form.config_json.display_role === 'summary'">
+                <label class="block text-sm font-medium text-secondary-700 mb-1">Layout Kolom</label>
+                <select v-model="form.config_json.summary_layout" class="input-field">
+                  <option value="grid_2col">2 Kolom</option>
+                  <option value="grid_1col">1 Kolom</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -154,15 +178,28 @@ const form = reactive({
   nama_dataset: '',
   query_sumber_data: '',
   deskripsi: '',
-  urutan: 1
+  urutan: 1,
+  config_json: {
+    display_role: '',
+    summary_layout: 'grid_2col'
+  }
 })
 
 function openModal(ds?: AdminDataset) {
   editingDataset.value = ds || null
   if (ds) {
-    Object.assign(form, { nama_dataset: ds.nama_dataset, query_sumber_data: ds.query_sumber_data, deskripsi: ds.deskripsi || '', urutan: ds.urutan })
+    Object.assign(form, {
+      nama_dataset: ds.nama_dataset,
+      query_sumber_data: ds.query_sumber_data,
+      deskripsi: ds.deskripsi || '',
+      urutan: ds.urutan,
+      config_json: {
+        display_role: ds.config_json?.display_role || '',
+        summary_layout: ds.config_json?.summary_layout || 'grid_2col'
+      }
+    })
   } else {
-    Object.assign(form, { nama_dataset: '', query_sumber_data: '', deskripsi: '', urutan: 1 })
+    Object.assign(form, { nama_dataset: '', query_sumber_data: '', deskripsi: '', urutan: 1, config_json: { display_role: '', summary_layout: 'grid_2col' } })
   }
   showModal.value = true
 }
@@ -173,10 +210,17 @@ function closeModal() {
 }
 
 async function saveDataset() {
+  // Build config_json payload (only send if has values)
+  const configJson = form.config_json.display_role
+    ? { ...form.config_json }
+    : undefined
+
+  const payload: any = { ...form, config_json: configJson }
+
   if (editingDataset.value) {
-    await store.updateDataset(editingDataset.value.id_query, { ...form })
+    await store.updateDataset(editingDataset.value.id_query, payload)
   } else {
-    await store.createDataset({ ...form })
+    await store.createDataset(payload)
   }
   closeModal()
 }

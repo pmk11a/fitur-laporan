@@ -37,6 +37,10 @@ export interface AdminDataset {
   deskripsi: string | null
   query_sumber_data: string
   urutan: number
+  config_json?: {
+    display_role?: 'summary' | 'detail'
+    summary_layout?: 'grid_2col' | 'grid_1col'
+  }
 }
 
 export interface AdminColumn {

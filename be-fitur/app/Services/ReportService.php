@@ -308,7 +308,8 @@ class ReportService
                 'id_query' => $q->id_query,
                 'nama_dataset' => $q->nama_dataset,
                 'deskripsi' => $q->deskripsi,
-                'urutan' => $q->urutan
+                'urutan' => $q->urutan,
+                'config_json' => json_decode($q->config_json ?? '{}', true),
             ], $queries);
         } catch (\Exception $e) {
             return [];
