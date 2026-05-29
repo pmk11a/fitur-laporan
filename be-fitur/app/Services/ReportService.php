@@ -498,7 +498,7 @@ class ReportService
     private function executeQuery(string $namaDataset, int $idQuery, array $filters): array
     {
         $queryDef = DB::connection('sqlsrv')->selectOne(
-            "SELECT query_sumber_data FROM dbquerylaporan WHERE id_query = ?",
+            "SELECT query_sumber_data, config_json FROM dbquerylaporan WHERE id_query = ?",
             [$idQuery]
         );
 
@@ -507,10 +507,32 @@ class ReportService
         }
 
         $sql = $queryDef->query_sumber_data;
+
+        // Parse config_json for static parameters (e.g., JenisJurnal = 'BKM')
+        $staticParams = [];
+        if (!empty($queryDef->config_json)) {
+            try {
+                $decoded = json_decode($queryDef->config_json, true);
+                if (is_array($decoded)) {
+                    $staticParams = $decoded;
+                }
+            } catch (\Exception $e) {
+                // Ignore JSON parse errors
+            }
+        }
+
+        // Replace static params from config_json first (e.g., @JenisJurnal from JenisJurnal)
+        foreach ($staticParams as $key => $value) {
+            $placeholder = '@' . $key;
+            if (str_contains($sql, $placeholder)) {
+                $sql = str_replace($placeholder, "'" . addslashes((string) $value) . "'", $sql);
+            }
+        }
+
         $params = [];
         $paramValues = [];
 
-        // Replace @param placeholders with explicit values
+        // Replace @param placeholders with explicit values from filters
         $userId = null;
         foreach ($filters as $key => $value) {
             // Extract user ID if present
@@ -560,6 +582,24 @@ class ReportService
 
         // Execute query directly with substituted values
         try {
+            // Fallback: if any @placeholder remains unreplaced (no filter provided)
+            // → remove entire WHERE clause containing it (safer than replacing with '')
+            if (preg_match('/@\w+/', $sql)) {
+                // Simple approach: if @SelectedItems or @filter remains,
+                // just remove the entire WHERE clause to select all rows.
+                // This handles the common case: "WHERE col IN (@X) OR @X IS NULL"
+                // strips everything after WHERE up to the next ORDER/GROUP/etc keyword
+                $sql = preg_replace(
+                    '/\s*WHERE\s+.*?(ORDER|GROUP|HAVING|OPTION|LIMIT|$)/is',
+                    ' $1',
+                    $sql
+                );
+                $sql = trim($sql);
+                // If we removed too much and have dangling AND/OR at start, clean it
+                $sql = preg_replace('/^\s*(AND|OR)\s+/i', '', $sql);
+                $sql = preg_replace('/^\s*WHERE\s*$/i', '', $sql);
+            }
+
             $results = DB::connection('sqlsrv')->select($sql);
         } catch (\Exception $e) {
             throw new \Exception("Dataset {$namaDataset}: " . $e->getMessage());

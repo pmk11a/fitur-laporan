@@ -362,17 +362,54 @@ export const useReportStore = defineStore('report', {
     },
 
     /**
-     * Initialize filters from config defaults
+     * Initialize filters from config defaults + defaultPeriod
      */
     initializeFilters() {
       if (!this.currentReport?.filters) return
 
       this.filters = {}
+
+      const applyDefaultPeriod = () => {
+        if (!this.defaultPeriod) return
+
+        const bulan = this.defaultPeriod.bulan
+        const tahun = this.defaultPeriod.tahun
+
+        for (const filter of this.currentReport!.filters!) {
+          const label = (filter.label || '').toLowerCase()
+          const name = (filter.nama_filter || '').toLowerCase()
+          const combined = label + ' ' + name
+
+          if ((filter.tipe_input === 'number' || filter.tipe_input === 'month' || filter.tipe_input === 'year')
+              && !filter.nilai_default) {
+            if (combined.includes('tahun')) {
+              this.filters[filter.nama_filter] = tahun.toString()
+            } else if (combined.includes('bulan') && !combined.includes('akhhir')) {
+              this.filters[filter.nama_filter] = bulan.toString()
+            }
+          }
+        }
+      }
+
       for (const filter of this.currentReport.filters) {
         if (filter.nilai_default) {
           this.filters[filter.nama_filter] = filter.nilai_default
+          continue
+        }
+
+        const tipe = filter.tipe_input || ''
+        if (tipe === 'date') {
+          if (filter.nama_filter === 'TanggalAwal' || filter.nama_filter === 'tglAwal') {
+            this.filters[filter.nama_filter] = this.defaultPeriod?.tglAwal ?? ''
+          } else if (filter.nama_filter === 'TanggalAkhir' || filter.nama_filter === 'tglAkhir') {
+            this.filters[filter.nama_filter] = this.defaultPeriod?.tglAkhir ?? ''
+          } else {
+            this.filters[filter.nama_filter] = this.defaultPeriod?.tglAwal ?? ''
+          }
         }
       }
+
+      applyDefaultPeriod()
     },
 
     /**
