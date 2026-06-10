@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\LabelGrup;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ReportService
 {
@@ -535,6 +536,7 @@ class ReportService
 
         // Replace @param placeholders with explicit values from filters
         $userId = null;
+        $droppedFilters = [];
         foreach ($filters as $key => $value) {
             // Extract user ID if present
             if ($key === 'userId' && $value) {
@@ -542,24 +544,41 @@ class ReportService
             }
 
             $placeholder = '@' . $key;
-            if (str_contains($sql, $placeholder)) {
-                // Handle array values (multi-select from checkbox mode)
-                // Build IN ('a','b','c') clause instead of single value
-                if (is_array($value) && count($value) > 0) {
-                    $escaped = array_map(fn($v) => "'" . addslashes((string) $v) . "'", $value);
-                    $inClause = implode(',', $escaped);
-                    $sql = str_replace($placeholder, $inClause, $sql);
-                } elseif (is_array($value) && count($value) === 0) {
-                    // Empty array → select ALL (no WHERE restriction)
-                    // Replace with dummy '1=1' to avoid SQL error, or remove the clause entirely
-                    // We'll leave as-is (no restriction) by replacing with a truthy expression
-                    $sql = str_replace($placeholder, "'__ALL__'", $sql);
-                    // Note: caller should handle __ALL__ as "no filter applied"
-                } else {
-                    // Scalar value — escape and replace
-                    $sql = str_replace($placeholder, "'" . addslashes((string) $value) . "'", $sql);
+            if (!str_contains($sql, $placeholder)) {
+                // Filter supplied by client but query has no matching @placeholder
+                // → it would be silently ignored. Log it so misconfigurations are visible.
+                if ($key !== 'userId' && $value !== '' && $value !== null) {
+                    $droppedFilters[] = $key;
                 }
+                continue;
             }
+
+            // Handle array values (multi-select from checkbox mode)
+            // Build IN ('a','b','c') clause instead of single value
+            if (is_array($value) && count($value) > 0) {
+                $escaped = array_map(fn($v) => "'" . addslashes((string) $v) . "'", $value);
+                $inClause = implode(',', $escaped);
+                $sql = str_replace($placeholder, $inClause, $sql);
+            } elseif (is_array($value) && count($value) === 0) {
+                // Empty array → no filter applied. Replace placeholder with NULL
+                // so SPs that check `WHERE col = @X OR @X IS NULL` work correctly.
+                $sql = str_replace($placeholder, 'NULL', $sql);
+            } elseif ($value === '' || $value === null) {
+                // Empty scalar → treat as NULL (no filter applied to SP)
+                // Use NULL so stored procedures that check @param IS NULL can return all rows
+                $sql = str_replace($placeholder, 'NULL', $sql);
+            } else {
+                // Scalar value — escape and replace
+                $sql = str_replace($placeholder, "'" . addslashes((string) $value) . "'", $sql);
+            }
+        }
+
+        if (!empty($droppedFilters)) {
+            \Log::warning('ReportService: filters dropped (not used by query)', [
+                'dataset' => $namaDataset,
+                'id_query' => $idQuery,
+                'dropped' => $droppedFilters,
+            ]);
         }
 
         // Handle @IDUser - get from userId filter or from authenticated user
@@ -583,6 +602,8 @@ class ReportService
 
         // Execute query directly with substituted values
         try {
+            Log::info('[ReportService::executeQuery] dataset=' . $namaDataset . ' | filters=' . json_encode($filters) . ' | sql=' . $sql);
+
             // Fallback: if any @placeholder remains unreplaced (no filter provided)
             // → remove entire WHERE clause containing it (safer than replacing with '')
             if (preg_match('/@\w+/', $sql)) {

@@ -19,7 +19,7 @@ class ReportController extends Controller
      */
     public function menu(Request $request): JsonResponse
     {
-        $userId = $request->user()->USERID ?? $request->input('userId', '');
+        $userId = optional($request->user())->USERID ?? $request->input('userId', '');
 
         if (empty($userId)) {
             return response()->json([
@@ -55,7 +55,7 @@ class ReportController extends Controller
         }
 
         // Get user default period from dbperiode
-        $userId = $request->user()->USERID ?? $request->input('userId', '');
+        $userId = optional($request->user())->USERID ?? $request->input('userId', '');
         $defaultPeriod = $this->reportService->getUserDefaultPeriod($userId);
 
         $config['defaultPeriod'] = $defaultPeriod;
@@ -75,7 +75,7 @@ class ReportController extends Controller
         $filters = $request->input('filters', []);
 
         // Get userId from authenticated user or request
-        $userId = $request->user()->USERID ?? $request->input('userId', '');
+        $userId = optional($request->user())->USERID ?? $request->input('userId', '');
         $filters['userId'] = $userId;
 
         $result = $this->reportService->generateReport($kodeMenu, $filters);

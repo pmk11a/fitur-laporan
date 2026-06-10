@@ -14,6 +14,19 @@
 
         <div class="flex items-center gap-3">
           <button
+            @click="showPreferences = true"
+            class="btn-secondary flex items-center gap-2"
+            title="Format &amp; Column Preferences"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Settings
+          </button>
+
+          <button
             v-if="reportStore.datasets['T2'] || reportStore.reportData"
             @click="exportReport"
             class="btn-secondary flex items-center gap-2"
@@ -37,6 +50,13 @@
         </div>
       </div>
     </div>
+
+    <!-- Preferences Modal -->
+    <PreferencesPanel
+      v-if="showPreferences"
+      :kode="kodeMenu"
+      @close="showPreferences = false"
+    />
 
     <!-- Content -->
     <div class="p-6">
@@ -63,6 +83,15 @@
 
       <!-- Report Content -->
       <template v-else-if="reportStore.currentReport">
+        <!-- Non-blocking warning banner for backend warnings (e.g. ignored filter values) -->
+        <div
+          v-if="reportStore.lastError"
+          class="mb-4 px-4 py-3 rounded-md bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm"
+        >
+          <div class="font-semibold mb-1">⚠️ Warning</div>
+          <div>{{ reportStore.lastError }}</div>
+        </div>
+
         <!-- Filter Panel -->
         <div v-if="effectiveFilters.length > 0" class="card p-6 mb-6">
           <h3 class="text-sm font-medium text-secondary-700 mb-4 flex items-center gap-2">
@@ -192,7 +221,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
               <span class="text-sm font-medium text-secondary-700">
-                {{ (reportStore.datasets['T2'] || reportStore.reportData || []).length }} records found
+                {{ firstDetailRecordCount }} records found
               </span>
             </div>
 
@@ -208,8 +237,9 @@
 
           <!-- Data Table - Generic Multi-Dataset Support -->
           <div class="overflow-x-auto">
-            <!-- Special 2-Column Layout for Neraca (20503) - Aktiva & Pasiva side-by-side -->
-            <div v-if="detailDatasets.length === 2" class="grid grid-cols-2 gap-6">
+            <!-- Special 2-Column Layout for Neraca (20503) - Aktiva & Pasiva side-by-side
+                 Only used when ALL detail datasets have config_json.detail_layout = 'side_by_side' -->
+            <div v-if="useSideBySideLayout" class="grid grid-cols-2 gap-6">
               <div v-for="(dataset, dsIndex) in detailDatasets" :key="dataset.nama_dataset">
 
                 <!-- Dataset Section Header -->
@@ -256,7 +286,7 @@
                         :key="colIdx"
                         class="px-4 py-3 border-b border-secondary-100"
                       >
-                        {{ formatCell(row[colKey]) }}
+                        {{ formatCell(row[colKey], colKey) }}
                       </td>
                     </tr>
                   </tbody>
@@ -312,7 +342,7 @@
                         :key="colIdx"
                         class="px-4 py-3 border-b border-secondary-100"
                       >
-                        {{ formatCell(row[colKey]) }}
+                        {{ formatCell(row[colKey], colKey) }}
                       </td>
                     </tr>
                   </tbody>
@@ -339,7 +369,7 @@
                   <tbody>
                     <tr v-for="field in t1LeftFields" :key="field.key">
                       <td class="py-1 pr-4 text-secondary-600 w-1/3">{{ field.label }}</td>
-                      <td class="py-1 text-secondary-900 font-medium text-right">{{ formatCell(t1SummaryData[field.key]) }}</td>
+                      <td class="py-1 text-secondary-900 font-medium text-right">{{ formatCell(t1SummaryData[field.key], field.key) }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -351,7 +381,7 @@
                   <tbody>
                     <tr v-for="field in t1RightFields" :key="field.key">
                       <td class="py-1 pr-4 text-secondary-600 w-1/2">{{ field.label }}</td>
-                      <td class="py-1 text-secondary-900 font-medium text-right">{{ formatCell(t1SummaryData[field.key]) }}</td>
+                      <td class="py-1 text-secondary-900 font-medium text-right">{{ formatCell(t1SummaryData[field.key], field.key) }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -401,6 +431,7 @@ const reportStore = useReportStore()
 
 const kodeMenu = computed(() => route.params.kode as string)
 const showAllRecords = ref(false)
+const showPreferences = ref(false)
 
 // Get ACCESS code from current report
 const accessCode = computed(() => {
@@ -505,17 +536,34 @@ const t1Labels = computed(() => {
 })
 
 // Summary Left Column Fields (kas details: Tunai, Giro, Bon, etc.)
+// If config_json has summary_fields, use only those fields (Bank Harian pattern)
+// Otherwise show ALL T1 columns from dbkolomlaporan (Kas Harian pattern)
 const t1LeftFields = computed(() => {
   if (!summaryDatasetName.value) return []
   if (!reportStore.currentReport?.columns?.[summaryDatasetName.value]) return []
+
+  // Check if config_json has explicit summary_fields
+  const datasets = reportStore.currentReport?.datasets || []
+  const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary')
+  const summaryFields = summaryDs?.config_json?.summary_fields
+
+  if (summaryFields && Array.isArray(summaryFields)) {
+    return reportStore.currentReport.columns[summaryDatasetName.value]
+      .filter((c: any) => summaryFields.includes(c.nama_kolom))
+      .map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom }))
+  }
+
   return reportStore.currentReport.columns[summaryDatasetName.value]
     .map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom }))
 })
 
 // Summary Right Column Fields (totals from SP)
+// Empty when using grid_1col (Bank Harian pattern: all fields in single column)
 const t1RightFields = computed(() => {
   if (!summaryDatasetName.value) return []
   if (!reportStore.currentReport?.columns?.[summaryDatasetName.value]) return []
+  if (summaryColumnCount.value === 1) return []
+
   // T1 from SP has: SaldoAwalD, SaldoAkhirD, TotalD (computed values)
   return [
     { key: 'TotalD', label: 'Total' },
@@ -555,29 +603,36 @@ function getT1Label(key: string): string {
   return t1Labels.value[key as keyof typeof t1Labels.value] || String(key).replace(/([A-Z])/g, ' $1').trim()
 }
 
-// Initialize dynamic filter values (before watch)
+// Dynamic filter values — synced from store after initializeFilters + nextTick
 const dynamicFilterValues = ref<Record<string, string>>({})
 
-// Initialize filter values when report loads
-watch(() => reportStore.currentReport, () => {
-  // Use defaultPeriod from dbperiode if available, otherwise fallback to current month
-  if (reportStore.defaultPeriod) {
-    dynamicFilterValues.value = {
-      TglAwal: reportStore.defaultPeriod.tglAwal,
-      TglAkhir: reportStore.defaultPeriod.tglAkhir,
-      Bulan: String(reportStore.defaultPeriod.bulan),
-      Tahun: String(reportStore.defaultPeriod.tahun)
-    }
-  } else {
-    const today = new Date()
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
-    dynamicFilterValues.value = {
-      TglAwal: firstDay.toISOString().split('T')[0],
-      TglAkhir: today.toISOString().split('T')[0],
-      Bulan: String(today.getMonth() + 1),
-      Tahun: String(today.getFullYear())
+// Sync dynamicFilterValues from store after initializeFilters runs
+watch(() => [reportStore.filters, reportStore.defaultPeriod], () => {
+  const defaults = reportStore.defaultPeriod
+  const newValues: Record<string, string> = {}
+
+  for (const [key, val] of Object.entries(reportStore.filters)) {
+    newValues[key] = String(val ?? '')
+  }
+
+  // Fill any missing date filters from defaultPeriod
+  if (defaults) {
+    for (const f of (reportStore.currentReport?.filters || [])) {
+      const name = f.nama_filter as string
+      const tipe = f.tipe_input as string
+      if (tipe === 'date' && !newValues[name]) {
+        if (name.toLowerCase().includes('awal') || name.toLowerCase().includes('mulai')) {
+          newValues[name] = defaults.tglAwal
+        } else if (name.toLowerCase().includes('akhir') || name.toLowerCase().includes('sampai')) {
+          newValues[name] = defaults.tglAkhir
+        } else {
+          newValues[name] = defaults.tglAwal
+        }
+      }
     }
   }
+
+  dynamicFilterValues.value = newValues
 }, { immediate: true })
 
 // Get effective filters (from DB masterlaporan ONLY - no hardcoded fallback)
@@ -636,12 +691,25 @@ const summaryColumnCount = computed(() => {
   return summaryDs?.config_json?.summary_layout === 'grid_1col' ? 1 : 2
 })
 
+// Side-by-side layout only used when ALL detail datasets have config_json.detail_layout = 'side_by_side'
+// (Neraca special case - Aktiva & Pasiva). Bank Harian with 2 detail datasets (T2 + T3)
+// must NOT trigger this — they should stack vertically.
+const useSideBySideLayout = computed(() => {
+  if (detailDatasets.value.length !== 2) return false
+  return detailDatasets.value.every((d: any) => d.config_json?.detail_layout === 'side_by_side')
+})
+
 const allReportDatasets = computed(() => {
   return reportStore.currentReport?.datasets || []
 })
 
 const hasGrouping = computed(() => {
   return reportStore.currentReport?.grouping?.length > 0
+})
+
+const firstDetailRecordCount = computed(() => {
+  const firstDetail = detailDatasets.value[0]?.nama_dataset
+  return firstDetail ? (reportStore.datasets[firstDetail] || []).length : (reportStore.reportData || []).length
 })
 
 function getDatasetRecordCount(namaDataset: string): number {
@@ -670,10 +738,14 @@ function getColumnLabelsForDataset(namaDataset: string): string[] {
 }
 // ===== End Generic Multi-Dataset Support =====
 
+// Number formatter with hierarchical config (col.{kode}.{field} -> ... -> system default)
+const { formatColumn } = useNumberFormatter(kodeMenu.value)
+
 // Load report config then auto-generate (for no-filter reports)
 onMounted(async () => {
   if (kodeMenu.value) {
     await reportStore.fetchReport(kodeMenu.value)
+    await nextTick()
     // Auto-generate if no filters configured
     if (!reportStore.currentReport?.filters?.length && reportStore.currentReport) {
       await generateReport()
@@ -704,10 +776,10 @@ async function generateReport() {
   }
 }
 
-function formatCell(value: any): string {
+function formatCell(value: any, columnName?: string): string {
   if (value === null || value === undefined) return '-'
-  if (typeof value === 'number') return value.toLocaleString('id-ID')
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+
   if (typeof value === 'string') {
     // Handle ".000000" format (empty numeric from SP)
     if (value === '.000000' || value === '.00' || value === '.0') return '-'
@@ -717,6 +789,28 @@ function formatCell(value: any): string {
       return new Date(dateMatch[1]).toLocaleDateString('id-ID')
     }
   }
+
+  // Numeric: delegate to formatter with per-column config lookup
+  if (typeof value === 'number' || (typeof value === 'string' && value !== '' && !isNaN(Number(value)))) {
+    // Map known numeric column names to their type for type-based defaults
+    const numericTypes: Record<string, string> = {
+      Debet: 'currency', debet: 'currency', debet2: 'currency',
+      kredit: 'currency', Kredit: 'currency', kredit2: 'currency',
+      Saldo: 'currency', SaldoAwal: 'currency', SaldoAwalD: 'currency',
+      SaldoAwalK: 'currency', SaldoAkhir: 'currency', SaldoAkhirD: 'currency',
+      SaldoAkhirK: 'currency', TotalD: 'currency', TotalK: 'currency',
+      Tunai: 'currency', SaldoGiro: 'currency', SaldoBon: 'currency',
+      SaldoBonD: 'currency', SaldoBonE: 'currency', SaldoBonA: 'currency',
+      SaldoBonDH: 'currency', SaldoGiroTolakan: 'currency',
+      penerimaan: 'currency', pengeluaran: 'currency', nilai: 'currency',
+      Jumlah: 'currency', Total: 'currency', Nominal: 'currency',
+      Qty: 'qty', qty: 'qty', quantity: 'qty', Jumlah2: 'qty',
+      Persen: 'percent', percent: 'percent', pct: 'percent',
+    }
+    const colType = columnName ? numericTypes[columnName] : undefined
+    return formatColumn(columnName || '__default', value, colType)
+  }
+
   return String(value)
 }
 
@@ -726,7 +820,8 @@ function printReport() {
 
 async function exportReport(format = 'csv') {
   const datasets = reportStore.datasets
-  const detailData = datasets['T2'] || datasets[Object.keys(datasets)[0]]
+  const firstDetail = detailDatasets.value[0]?.nama_dataset
+  const detailData = firstDetail ? (datasets[firstDetail] || []) : Object.values(datasets)[0] || []
 
   if (!detailData || detailData.length === 0) {
     alert('No data to export')
@@ -748,7 +843,7 @@ function exportCSV(filename: string, data: any[]) {
   if (!data || data.length === 0) return
 
   // Get column config
-  const mainDataset = reportStore.currentReport?.datasets?.[0]?.nama_dataset || 'T2'
+  const mainDataset = reportStore.currentReport?.datasets?.find((d: any) => d.config_json?.display_role !== 'summary')?.nama_dataset || Object.keys(datasets)[0] || ''
   const cols = reportStore.currentReport?.columns?.[mainDataset] || []
 
   // Build CSV

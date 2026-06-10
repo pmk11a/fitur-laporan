@@ -133,6 +133,7 @@ interface ReportState {
   loading: boolean
   generating: boolean
   error: string | null
+  lastError: string | null
   filters: Record<string, any>
   // NEW: Full groupingConfig from database (replaces groupingStrategy)
   groupingConfig: {
@@ -159,6 +160,7 @@ export const useReportStore = defineStore('report', {
     loading: false,
     generating: false,
     error: null,
+    lastError: null,
     filters: {},
     groupingConfig: null
   }),
@@ -168,6 +170,11 @@ export const useReportStore = defineStore('report', {
      * Check if report is loading
      */
     isLoading: (state) => state.loading || state.generating,
+
+    /**
+     * Check if there is an error from last generation
+     */
+    hasError: (state) => !!state.error || !!state.lastError,
 
     /**
      * Get required filters
@@ -326,9 +333,13 @@ export const useReportStore = defineStore('report', {
           // Show errors if any dataset failed
           if (response.errors && response.errors.length > 0) {
             console.warn('Report generation warnings:', response.errors)
+            this.lastError = response.errors.join('; ')
+          } else {
+            this.lastError = null
           }
         } else {
           this.error = 'Generation failed'
+          this.lastError = response.errors?.join('; ') || null
           this.datasets = {}
           this.groupedData = null
           this.reportData = null
@@ -336,10 +347,11 @@ export const useReportStore = defineStore('report', {
         }
       } catch (error: any) {
         this.error = error.data?.message || 'Failed to generate report'
+        this.lastError = error.data?.message || null
         this.datasets = {}
         this.groupedData = null
         this.reportData = null
-        this.groupingStrategy = 'default'
+        this.groupingConfig = null
       } finally {
         this.generating = false
       }
@@ -407,6 +419,10 @@ export const useReportStore = defineStore('report', {
           } else {
             this.filters[filter.nama_filter] = this.defaultPeriod?.tglAwal ?? ''
           }
+        } else if (tipe === 'text' || tipe === 'browse' || tipe === 'perkiraan') {
+          // Init non-date filters with empty string so backend receives the key
+          // (empty value is replaced with NULL by ReportService for SP calls)
+          this.filters[filter.nama_filter] = ''
         }
       }
 

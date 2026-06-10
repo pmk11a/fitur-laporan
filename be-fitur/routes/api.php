@@ -6,6 +6,7 @@ use App\Http\Controllers\MenuController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\BrowseController;
 use App\Http\Controllers\AdminReportController;
+use App\Http\Controllers\Api\UserPreferenceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -38,6 +39,15 @@ Route::prefix('reports')->group(function () {
     Route::get('/perkiraan/search', [ReportController::class, 'searchPerkiraan']);
     Route::get('/{kodeMenu}', [ReportController::class, 'show']);
     Route::post('/{kodeMenu}/preview', [ReportController::class, 'preview']);
+});
+
+// User preferences — universal key-value store
+Route::prefix('preferences')->group(function () {
+    Route::get('/', [UserPreferenceController::class, 'index']);
+    Route::post('/bulk', [UserPreferenceController::class, 'bulkUpdate']);
+    Route::get('/{namespace}/{key}', [UserPreferenceController::class, 'show']);
+    Route::put('/{namespace}/{key}', [UserPreferenceController::class, 'update']);
+    Route::delete('/{namespace}/{key}', [UserPreferenceController::class, 'destroy']);
 });
 
 // Admin routes — auth (userId dari query/body) + admin role check

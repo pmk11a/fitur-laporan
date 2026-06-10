@@ -46,4 +46,27 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function preferences()
+    {
+        return $this->hasMany(UserPreference::class);
+    }
+
+    public function getPreference(string $namespace, string $key, $default = null)
+    {
+        $pref = $this->preferences()
+            ->where('namespace', $namespace)
+            ->where('key', $key)
+            ->first();
+
+        return $pref ? $pref->value : $default;
+    }
+
+    public function setPreference(string $namespace, string $key, $value): UserPreference
+    {
+        return $this->preferences()->updateOrCreate(
+            ['namespace' => $namespace, 'key' => $key],
+            ['value' => $value]
+        );
+    }
 }
