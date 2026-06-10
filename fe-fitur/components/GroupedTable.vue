@@ -240,16 +240,17 @@ function getAlignmentClass(alignment: string): string {
   }
 }
 
-// Format cell value
+// Format cell value — delegate to useNumberFormatter for user-configurable formatting
+const { formatColumn } = useNumberFormatter()
+
 function formatCell(value: any, formatType: string): string {
   if (value === null || value === undefined || value === '') return '-'
 
   switch (formatType) {
     case 'currency':
+      return formatColumn('__currency_default', value, 'currency')
     case 'numeric':
-      const num = parseFloat(String(value).replace(/[^0-9.-]/g, ''))
-      if (isNaN(num)) return String(value)
-      return num.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+      return formatColumn('__numeric_default', value, 'numeric')
     case 'date':
       if (/^\d{4}-\d{2}-\d{2}/.test(String(value))) {
         return new Date(value).toLocaleDateString('id-ID')
