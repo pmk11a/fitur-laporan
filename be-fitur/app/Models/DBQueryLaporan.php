@@ -16,11 +16,13 @@ class DBQueryLaporan extends Model
         'query_sumber_data',
         'deskripsi',
         'urutan',
-        'config_json'
+        'config_json',
+        'visible'
     ];
 
     protected $casts = [
         'urutan' => 'integer',
+        'visible' => 'boolean',
         'config_json' => 'array',
     ];
 

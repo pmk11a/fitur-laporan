@@ -199,6 +199,7 @@ class AdminReportService
             'deskripsi' => $d->deskripsi,
             'query_sumber_data' => $d->query_sumber_data,
             'urutan' => $d->urutan,
+            'visible' => (bool) ($d->visible ?? 1),
             'config_json' => json_decode($d->config_json ?? '{}', true),
         ], $datasets);
     }
@@ -220,6 +221,7 @@ class AdminReportService
             'config_json' => isset($data['config_json']) && $data['config_json']
                 ? json_encode($data['config_json'])
                 : null,
+            'visible' => $data['visible'] ?? true,
         ]);
 
         return [
@@ -229,6 +231,7 @@ class AdminReportService
             'query_sumber_data' => $data['query_sumber_data'],
             'deskripsi' => $data['deskripsi'] ?? null,
             'urutan' => $data['urutan'] ?? $urutan,
+            'visible' => $data['visible'] ?? true,
             'config_json' => $data['config_json'] ?? null,
         ];
     }
@@ -246,6 +249,10 @@ class AdminReportService
             $update['config_json'] = $data['config_json']
                 ? json_encode($data['config_json'])
                 : null;
+        }
+
+        if (array_key_exists('visible', $data)) {
+            $update['visible'] = (bool) $data['visible'];
         }
 
         return DB::connection('sqlsrv')->table('dbquerylaporan')

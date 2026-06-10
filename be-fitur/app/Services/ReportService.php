@@ -300,7 +300,7 @@ class ReportService
     {
         try {
             $queries = DB::connection('sqlsrv')->select(
-                "SELECT * FROM dbquerylaporan WHERE id_laporan = ? ORDER BY urutan",
+                "SELECT * FROM dbquerylaporan WHERE id_laporan = ? AND visible = 1 ORDER BY urutan",
                 [$idLaporan]
             );
 
@@ -309,6 +309,7 @@ class ReportService
                 'nama_dataset' => $q->nama_dataset,
                 'deskripsi' => $q->deskripsi,
                 'urutan' => $q->urutan,
+                'visible' => (bool) ($q->visible ?? 1),
                 'config_json' => json_decode($q->config_json ?? '{}', true),
             ], $queries);
         } catch (\Exception $e) {

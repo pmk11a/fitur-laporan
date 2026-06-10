@@ -12,7 +12,7 @@
     </div>
 
     <div v-else class="space-y-3">
-      <div v-for="ds in store.selectedReportData.datasets" :key="ds.id_query" class="card p-4">
+      <div v-for="ds in store.selectedReportData.datasets" :key="ds.id_query" class="card p-4" :class="!ds.visible ? 'opacity-60' : ''">
         <div class="flex items-start justify-between gap-4">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-1 flex-wrap">
@@ -23,6 +23,9 @@
                 <span v-else class="ml-1">2 kolom</span>
               </span>
               <span v-else-if="ds.config_json?.display_role === 'detail'" class="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs">Detail</span>
+              <span v-if="!ds.visible" class="px-2 py-0.5 bg-secondary-100 text-secondary-500 rounded text-xs border border-secondary-200">
+                Hidden
+              </span>
               <span class="text-xs text-secondary-400">Urutan: {{ ds.urutan }}</span>
             </div>
             <p v-if="ds.deskripsi" class="text-xs text-secondary-500 mb-2">{{ ds.deskripsi }}</p>
@@ -98,6 +101,19 @@
                   <option value="grid_1col">1 Kolom</option>
                 </select>
               </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <input
+                id="dataset-visible"
+                v-model="form.visible"
+                type="checkbox"
+                class="rounded border-secondary-300 text-primary-500 focus:ring-primary-400"
+              />
+              <label for="dataset-visible" class="text-sm text-secondary-700 select-none cursor-pointer">
+                Tampilkan dataset ini di laporan
+                <span v-if="!form.visible" class="text-secondary-400 ml-1">(dataset tersembunyi, tidak ikut di-execute)</span>
+              </label>
             </div>
 
             <div>
@@ -179,6 +195,7 @@ const form = reactive({
   query_sumber_data: '',
   deskripsi: '',
   urutan: 1,
+  visible: true,
   config_json: {
     display_role: '',
     summary_layout: 'grid_2col'
@@ -193,13 +210,14 @@ function openModal(ds?: AdminDataset) {
       query_sumber_data: ds.query_sumber_data,
       deskripsi: ds.deskripsi || '',
       urutan: ds.urutan,
+      visible: ds.visible !== false,
       config_json: {
         display_role: ds.config_json?.display_role || '',
         summary_layout: ds.config_json?.summary_layout || 'grid_2col'
       }
     })
   } else {
-    Object.assign(form, { nama_dataset: '', query_sumber_data: '', deskripsi: '', urutan: 1, config_json: { display_role: '', summary_layout: 'grid_2col' } })
+    Object.assign(form, { nama_dataset: '', query_sumber_data: '', deskripsi: '', urutan: 1, visible: true, config_json: { display_role: '', summary_layout: 'grid_2col' } })
   }
   showModal.value = true
 }
