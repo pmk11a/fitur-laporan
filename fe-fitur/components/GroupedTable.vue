@@ -135,6 +135,7 @@ const props = defineProps<{
   columns: { [dataset: string]: any[] }
   grandTotal?: { [col: string]: number }
   mainDataset?: string
+  kodeMenu?: string
 }>()
 
 // Config-based grouping helpers
@@ -241,7 +242,7 @@ function getAlignmentClass(alignment: string): string {
 }
 
 // Format cell value — delegate to useNumberFormatter for user-configurable formatting
-const { formatColumn } = useNumberFormatter()
+const { formatColumn } = useNumberFormatter(props.kodeMenu)
 
 function formatCell(value: any, formatType: string): string {
   if (value === null || value === undefined || value === '') return '-'

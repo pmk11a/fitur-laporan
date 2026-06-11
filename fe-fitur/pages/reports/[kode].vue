@@ -259,6 +259,7 @@
                     :columns="reportStore.columns"
                     :grandTotal="reportStore.grandTotal"
                     :mainDataset="dataset.nama_dataset"
+                    :kodeMenu="kodeMenu"
                   />
                 </div>
 
@@ -282,11 +283,11 @@
                       class="hover:bg-secondary-50"
                     >
                       <td
-                        v-for="(colKey, colIdx) in getColumnHeadersForDataset(dataset.nama_dataset)"
+                        v-for="(col, colIdx) in getVisibleColumnsForDataset(dataset.nama_dataset)"
                         :key="colIdx"
                         class="px-4 py-3 border-b border-secondary-100"
                       >
-                        {{ formatCell(row[colKey], colKey) }}
+                        {{ formatCell(getRowValue(row, col.nama_kolom), col) }}
                       </td>
                     </tr>
                   </tbody>
@@ -315,6 +316,7 @@
                     :columns="reportStore.columns"
                     :grandTotal="reportStore.grandTotal"
                     :mainDataset="dataset.nama_dataset"
+                    :kodeMenu="kodeMenu"
                   />
                 </div>
 
@@ -338,11 +340,11 @@
                       class="hover:bg-secondary-50"
                     >
                       <td
-                        v-for="(colKey, colIdx) in getColumnHeadersForDataset(dataset.nama_dataset)"
+                        v-for="(col, colIdx) in getVisibleColumnsForDataset(dataset.nama_dataset)"
                         :key="colIdx"
                         class="px-4 py-3 border-b border-secondary-100"
                       >
-                        {{ formatCell(row[colKey], colKey) }}
+                        {{ formatCell(getRowValue(row, col.nama_kolom), col) }}
                       </td>
                     </tr>
                   </tbody>
@@ -369,7 +371,7 @@
                   <tbody>
                     <tr v-for="field in t1LeftFields" :key="field.key">
                       <td class="py-1 pr-4 text-secondary-600 w-1/3">{{ field.label }}</td>
-                      <td class="py-1 text-secondary-900 font-medium text-right">{{ formatCell(t1SummaryData[field.key], field.key) }}</td>
+                      <td class="py-1 text-secondary-900 font-medium text-right">{{ formatCell(t1SummaryData[field.key], field.column || field.key) }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -550,11 +552,11 @@ const t1LeftFields = computed(() => {
   if (summaryFields && Array.isArray(summaryFields)) {
     return reportStore.currentReport.columns[summaryDatasetName.value]
       .filter((c: any) => summaryFields.includes(c.nama_kolom))
-      .map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom }))
+      .map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom, column: c }))
   }
 
   return reportStore.currentReport.columns[summaryDatasetName.value]
-    .map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom }))
+    .map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom, column: c }))
 })
 
 // Summary Right Column Fields (totals from SP)
@@ -732,9 +734,32 @@ function getColumnHeadersForDataset(namaDataset: string): string[] {
   return cols.filter(c => c.is_visible !== false).map(c => c.nama_kolom)
 }
 
+function getVisibleColumnsForDataset(namaDataset: string): ColumnConfig[] {
+  const cols = reportStore.columns[namaDataset] || []
+  return cols.filter(c => c.is_visible !== false) as ColumnConfig[]
+}
+
 function getColumnLabelsForDataset(namaDataset: string): string[] {
   const cols = reportStore.columns[namaDataset] || []
   return cols.filter(c => c.is_visible !== false).map(c => c.label_tampil || c.nama_kolom)
+}
+
+/**
+ * Case-insensitive row value lookup.
+ * SP output from SQL Server may return lowercase field names (e.g. `tanggal`, `nobukti`,
+ * `lawan`) while dbkolomlaporan defines them in camelCase (`Tanggal`, `NoBukti`, `Lawan`).
+ * Doing `row[col.nama_kolom]` directly returns `undefined` for any case mismatch.
+ * This helper scans the row for a key that matches case-insensitively, with a
+ * fallback to the original `row[key]` lookup.
+ */
+function getRowValue(row: any, key: string): any {
+  if (!row || !key) return undefined
+  if (row[key] !== undefined) return row[key]
+  const lower = String(key).toLowerCase()
+  for (const k of Object.keys(row)) {
+    if (k.toLowerCase() === lower) return row[k]
+  }
+  return undefined
 }
 // ===== End Generic Multi-Dataset Support =====
 
@@ -776,7 +801,7 @@ async function generateReport() {
   }
 }
 
-function formatCell(value: any, columnName?: string): string {
+function formatCell(value: any, columnRef?: string | any): string {
   if (value === null || value === undefined) return '-'
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
 
@@ -790,25 +815,29 @@ function formatCell(value: any, columnName?: string): string {
     }
   }
 
-  // Numeric: delegate to formatter with per-column config lookup
-  if (typeof value === 'number' || (typeof value === 'string' && value !== '' && !isNaN(Number(value)))) {
-    // Map known numeric column names to their type for type-based defaults
-    const numericTypes: Record<string, string> = {
-      Debet: 'currency', debet: 'currency', debet2: 'currency',
-      kredit: 'currency', Kredit: 'currency', kredit2: 'currency',
-      Saldo: 'currency', SaldoAwal: 'currency', SaldoAwalD: 'currency',
-      SaldoAwalK: 'currency', SaldoAkhir: 'currency', SaldoAkhirD: 'currency',
-      SaldoAkhirK: 'currency', TotalD: 'currency', TotalK: 'currency',
-      Tunai: 'currency', SaldoGiro: 'currency', SaldoBon: 'currency',
-      SaldoBonD: 'currency', SaldoBonE: 'currency', SaldoBonA: 'currency',
-      SaldoBonDH: 'currency', SaldoGiroTolakan: 'currency',
-      penerimaan: 'currency', pengeluaran: 'currency', nilai: 'currency',
-      Jumlah: 'currency', Total: 'currency', Nominal: 'currency',
-      Qty: 'qty', qty: 'qty', quantity: 'qty', Jumlah2: 'qty',
-      Persen: 'percent', percent: 'percent', pct: 'percent',
+  let lookupKey: string | undefined
+  let colType: string | undefined
+
+  if (columnRef && typeof columnRef === 'object') {
+    lookupKey = columnRef.nama_kolom
+    const td = String(columnRef.tipe_data || columnRef.format_type || '').toLowerCase()
+    if (td && ['numeric', 'decimal', 'money', 'currency', 'angka'].includes(td)) {
+      colType = 'currency'
+    } else if (td && ['percent', 'persen'].includes(td)) {
+      colType = 'percent'
+    } else if (td && ['qty', 'quantity', 'integer', 'int'].includes(td)) {
+      colType = 'qty'
     }
-    const colType = columnName ? numericTypes[columnName] : undefined
-    return formatColumn(columnName || '__default', value, colType)
+  } else if (typeof columnRef === 'string') {
+    lookupKey = columnRef
+  }
+
+  // No type hint and no column object — return raw string
+  // (numeric guessing removed: rely on DB format_type / columnRef or skip)
+
+  const isNumericValue = typeof value === 'number' || (typeof value === 'string' && value !== '' && !isNaN(Number(value)))
+  if (isNumericValue && colType !== undefined) {
+    return formatColumn(lookupKey || '__default', value, colType)
   }
 
   return String(value)
@@ -857,7 +886,7 @@ function exportCSV(filename: string, data: any[]) {
   for (const row of data) {
     const values = cols.map(c => {
       const key = c.nama_kolom
-      const val = row[key]
+      const val = getRowValue(row, key)
       if (val === null || val === undefined) return '""'
       const str = String(val).replace(/"/g, '""')
       return `"${str}"`

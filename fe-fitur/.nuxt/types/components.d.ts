@@ -18,6 +18,7 @@ interface _GlobalComponents {
   GroupedTable: typeof import("../../components/GroupedTable.vue")['default']
   MenuItem: typeof import("../../components/MenuItem.vue")['default']
   PerkiraanAutocomplete: typeof import("../../components/PerkiraanAutocomplete.vue")['default']
+  ReportTable: typeof import("../../components/ReportTable.vue")['default']
   Sidebar: typeof import("../../components/Sidebar.vue")['default']
   TopBar: typeof import("../../components/TopBar.vue")['default']
   AdminTabsColumnsTab: typeof import("../../components/admin/tabs/ColumnsTab.vue")['default']
@@ -26,6 +27,9 @@ interface _GlobalComponents {
   AdminTabsGeneralTab: typeof import("../../components/admin/tabs/GeneralTab.vue")['default']
   AdminTabsGroupingTab: typeof import("../../components/admin/tabs/GroupingTab.vue")['default']
   AdminTabsUserAccessTab: typeof import("../../components/admin/tabs/UserAccessTab.vue")['default']
+  PreferencesNumberFormatForm: typeof import("../../components/preferences/NumberFormatForm.vue")['default']
+  PreferencesPanel: typeof import("../../components/preferences/PreferencesPanel.vue")['default']
+  PreferencesReportsPreferencesTab: typeof import("../../components/preferences/ReportsPreferencesTab.vue")['default']
   NuxtWelcome: typeof import("../../node_modules/nuxt/dist/app/components/welcome.vue")['default']
   NuxtLayout: typeof import("../../node_modules/nuxt/dist/app/components/nuxt-layout")['default']
   NuxtErrorBoundary: typeof import("../../node_modules/nuxt/dist/app/components/nuxt-error-boundary.vue")['default']
@@ -53,6 +57,7 @@ interface _GlobalComponents {
   LazyGroupedTable: LazyComponent<typeof import("../../components/GroupedTable.vue")['default']>
   LazyMenuItem: LazyComponent<typeof import("../../components/MenuItem.vue")['default']>
   LazyPerkiraanAutocomplete: LazyComponent<typeof import("../../components/PerkiraanAutocomplete.vue")['default']>
+  LazyReportTable: LazyComponent<typeof import("../../components/ReportTable.vue")['default']>
   LazySidebar: LazyComponent<typeof import("../../components/Sidebar.vue")['default']>
   LazyTopBar: LazyComponent<typeof import("../../components/TopBar.vue")['default']>
   LazyAdminTabsColumnsTab: LazyComponent<typeof import("../../components/admin/tabs/ColumnsTab.vue")['default']>
@@ -61,6 +66,9 @@ interface _GlobalComponents {
   LazyAdminTabsGeneralTab: LazyComponent<typeof import("../../components/admin/tabs/GeneralTab.vue")['default']>
   LazyAdminTabsGroupingTab: LazyComponent<typeof import("../../components/admin/tabs/GroupingTab.vue")['default']>
   LazyAdminTabsUserAccessTab: LazyComponent<typeof import("../../components/admin/tabs/UserAccessTab.vue")['default']>
+  LazyPreferencesNumberFormatForm: LazyComponent<typeof import("../../components/preferences/NumberFormatForm.vue")['default']>
+  LazyPreferencesPanel: LazyComponent<typeof import("../../components/preferences/PreferencesPanel.vue")['default']>
+  LazyPreferencesReportsPreferencesTab: LazyComponent<typeof import("../../components/preferences/ReportsPreferencesTab.vue")['default']>
   LazyNuxtWelcome: LazyComponent<typeof import("../../node_modules/nuxt/dist/app/components/welcome.vue")['default']>
   LazyNuxtLayout: LazyComponent<typeof import("../../node_modules/nuxt/dist/app/components/nuxt-layout")['default']>
   LazyNuxtErrorBoundary: LazyComponent<typeof import("../../node_modules/nuxt/dist/app/components/nuxt-error-boundary.vue")['default']>

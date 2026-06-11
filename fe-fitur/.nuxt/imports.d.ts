@@ -34,9 +34,12 @@ export { API_CONFIGS, useActiveApi, mapKeuUser, ApiConfig, KeuLoginResponse, Fit
 export { useBrowseConfig, BrowseConfig } from '../composables/useBrowseConfig';
 export { useBrowseSearch, BrowseSearchResult } from '../composables/useBrowseSearch';
 export { useGroupingConfig } from '../composables/useGroupingConfig';
+export { useNumberFormatter } from '../composables/useNumberFormatter';
+export { usePreference, usePreferenceNamespace } from '../composables/usePreference';
 export { useAdminReportStore, AdminReport, AdminFilter, AdminDataset, AdminColumn, AdminGroup, AdminUserAccess, AdminUser, AdminKodeMenu } from '../stores/adminReports';
 export { useAuthStore, User } from '../stores/auth';
 export { useMenuStore } from '../stores/menu';
 export { useReportStore, FooterBandsConfig, ReportConfig, FilterConfig, DatasetConfig, ColumnConfig, GroupConfig, GroupedData, MenuItem } from '../stores/reports';
+export { useUserPreferencesStore } from '../stores/userPreferences';
 export { defineStore, acceptHMRUpdate, usePinia, storeToRefs } from '../node_modules/@pinia/nuxt/dist/runtime/composables';
 export { useNuxtDevTools } from '../node_modules/@nuxt/devtools/dist/runtime/use-nuxt-devtools';
