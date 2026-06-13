@@ -424,7 +424,7 @@
               <div
                 v-for="sig in signatureItems"
                 :key="sig.label"
-                class="flex-1 text-center"
+                class="flex-1"
                 :class="{
                   'text-left': sig.position === 'left',
                   'text-center': !sig.position || sig.position === 'center',
@@ -574,29 +574,32 @@ const t1Labels = computed(() => {
 })
 
 // Summary Left Column Fields (kas details: Tunai, Giro, Bon, etc.)
-// If config_json has summary_fields, use only those fields (Bank Harian pattern)
-// Otherwise show ALL T1 columns from dbkolomlaporan (Kas Harian pattern)
+// If config_json has summary_fields, use those fields in config order (Bank Harian pattern)
+// Otherwise show ALL T1 columns from dbkolomlaporan in DB order (Kas Harian pattern)
 const t1LeftFields = computed(() => {
   if (!summaryDatasetName.value) return []
   if (!reportStore.currentReport?.columns?.[summaryDatasetName.value]) return []
 
-  // Check if config_json has explicit summary_fields
   const datasets = reportStore.currentReport?.datasets || []
   const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary')
   const summaryFields = summaryDs?.config_json?.summary_fields
+  const cols = reportStore.currentReport.columns[summaryDatasetName.value]
 
   if (summaryFields && Array.isArray(summaryFields)) {
-    return reportStore.currentReport.columns[summaryDatasetName.value]
-      .filter((c: any) => summaryFields.includes(c.nama_kolom))
-      .map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom, column: c }))
+    // Use config array order
+    const colMap = new Map(cols.map((c: any) => [c.nama_kolom, c]))
+    return summaryFields
+      .map((f: string) => {
+        const c = colMap.get(f)
+        return c ? { key: f, label: c.label_tampil || f, column: c } : { key: f, label: f, column: null }
+      })
   }
 
-  return reportStore.currentReport.columns[summaryDatasetName.value]
-    .map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom, column: c }))
+  return cols.map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom, column: c }))
 })
 
 // Summary Right Column Fields (totals from SP)
-// Reads from config_json.right_fields; falls back to all T1 columns (Kas Harian pattern)
+// Reads from config_json.right_fields in config order; falls back to all T1 columns in DB order
 const t1RightFields = computed(() => {
   if (!summaryDatasetName.value) return []
   if (!reportStore.currentReport?.columns?.[summaryDatasetName.value]) return []
@@ -605,42 +608,55 @@ const t1RightFields = computed(() => {
   const datasets = reportStore.currentReport?.datasets || []
   const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary')
   const rightFields = summaryDs?.config_json?.right_fields
-
   const summaryCols = reportStore.currentReport.columns[summaryDatasetName.value]
 
   if (rightFields && Array.isArray(rightFields)) {
-    return summaryCols
-      .filter((c: any) => rightFields.includes(c.nama_kolom))
-      .map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom, column: c }))
+    // Use config array order
+    const colMap = new Map(summaryCols.map((c: any) => [c.nama_kolom, c]))
+    return rightFields
+      .map((f: string) => {
+        const c = colMap.get(f)
+        return c ? { key: f, label: c.label_tampil || f, column: c } : { key: f, label: f, column: null }
+      })
   }
 
   return summaryCols.map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom, column: c }))
 })
 
 // Footer Table from footer_bands config (rows × columns matrix)
+// Reads from t1SummaryData (which has computed SP values) for Saldo rows
+// and T2 transaction sums for Jumlah row
 const footerTable = computed(() => {
   const ft = reportStore.currentReport?.footer_bands?.bands?.summary?.footer_table
   if (!ft?.rows?.length || !ft?.columns?.length) return null
 
-  const sumName = summaryDatasetName.value
   const detName = detailDatasets.value[0]?.nama_dataset
-  const t1 = sumName ? reportStore.datasets[sumName]?.[0] : null
   const t2 = detName ? (reportStore.datasets[detName] || []) : []
+  const summary = t1SummaryData.value
 
-  // Map display label → data key
-  const rowKeyMap: Record<string, string> = {
+  // Map display label → data key (D-side default)
+  const rowKeyMapD: Record<string, string> = {
     'Jumlah': 'sumDebet',
     'Saldo Awal': 'SaldoAwalD',
     'Saldo Akhir': 'SaldoAkhirD',
     'Kontrol': 'TotalD'
   }
+  // K-side variant (for columns with "(K)" suffix or "Pengeluaran")
+  const rowKeyMapK: Record<string, string> = {
+    'Jumlah': 'sumKredit',
+    'Saldo Awal': 'SaldoAwalK',
+    'Saldo Akhir': 'SaldoAkhirK',
+    'Kontrol': 'TotalK'
+  }
 
-  // Map display label → T2 column nama_kolom
+  // Map display label → T2 column nama_kolom (for Jumlah row)
   const t2Cols = detName ? (reportStore.currentReport?.columns?.[detName] || []) : []
   const colFieldMap: Record<string, string> = {}
   for (const c of t2Cols) {
     if (c.label_tampil) colFieldMap[c.label_tampil] = c.nama_kolom
   }
+
+  const isKCol = (colLabel: string) => /\(K\)|pengeluaran|kredit/i.test(colLabel)
 
   return {
     columns: ft.columns,
@@ -652,9 +668,10 @@ const footerTable = computed(() => {
           if (!field) return 0
           return t2.reduce((s: number, r: any) => s + parseFloat(r[field] || 0), 0)
         }
-        const key = rowKeyMap[rowLabel]
-        if (!key || !t1) return 0
-        return parseFloat(t1[key] || 0)
+        const map = isKCol(colLabel) ? rowKeyMapK : rowKeyMapD
+        const key = map[rowLabel]
+        if (!key || !summary) return 0
+        return parseFloat(summary[key] || 0)
       })
     }))
   }
