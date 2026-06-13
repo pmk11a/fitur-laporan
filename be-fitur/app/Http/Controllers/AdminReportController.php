@@ -166,6 +166,10 @@ class AdminReportController extends Controller
             'config_json' => 'nullable|array',
             'config_json.display_role' => 'nullable|string|in:summary,detail',
             'config_json.summary_layout' => 'nullable|string|in:grid_2col,grid_1col',
+            'config_json.summary_fields' => 'nullable|array',
+            'config_json.summary_fields.*' => 'string',
+            'config_json.right_fields' => 'nullable|array',
+            'config_json.right_fields.*' => 'string',
         ]);
 
         $result = $this->service->createDataset($id, $data);
@@ -184,6 +188,10 @@ class AdminReportController extends Controller
             'config_json' => 'nullable|array',
             'config_json.display_role' => 'nullable|string|in:summary,detail',
             'config_json.summary_layout' => 'nullable|string|in:grid_2col,grid_1col',
+            'config_json.summary_fields' => 'nullable|array',
+            'config_json.summary_fields.*' => 'string',
+            'config_json.right_fields' => 'nullable|array',
+            'config_json.right_fields.*' => 'string',
         ]);
 
         $this->service->updateDataset($did, $data);

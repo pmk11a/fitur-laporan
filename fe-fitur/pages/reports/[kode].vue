@@ -383,26 +383,56 @@
                   <tbody>
                     <tr v-for="field in t1RightFields" :key="field.key">
                       <td class="py-1 pr-4 text-secondary-600 w-1/2">{{ field.label }}</td>
-                      <td class="py-1 text-secondary-900 font-medium text-right">{{ formatCell(t1SummaryData[field.key], field.key) }}</td>
+                      <td class="py-1 text-secondary-900 font-medium text-right">{{ formatCell(t1SummaryData[field.key], field.column || field.key) }}</td>
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
 
-                <!-- Dynamic Signature Section from footer_bands config -->
-                <div
-                  v-if="signatureItems.length > 0"
-                  class="grid gap-4 mt-4 pt-3 border-t border-secondary-300"
-                  :class="signatureGridClass"
-                >
-                  <div
-                    v-for="sig in signatureItems"
-                    :key="sig.label"
-                    class="text-center"
-                  >
-                    <p class="text-xs text-secondary-500 mb-8">{{ sig.label }}</p>
-                    <p class="text-xs text-secondary-700">(....................)</p>
-                  </div>
-                </div>
+            <!-- Dynamic Footer Table from footer_bands config -->
+            <div v-if="footerTable" class="mt-4 pt-3 border-t border-secondary-300">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th class="text-left py-1 pr-4 text-secondary-600 font-medium w-1/3"></th>
+                    <th
+                      v-for="colLabel in footerTable.columns"
+                      :key="colLabel"
+                      class="text-right py-1 px-4 text-secondary-600 font-medium"
+                    >{{ colLabel }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in footerTable.rows" :key="row.label">
+                    <td class="py-1 pr-4 text-secondary-600 w-1/3">{{ row.label }}</td>
+                    <td
+                      v-for="(cell, i) in row.cells"
+                      :key="i"
+                      class="py-1 px-4 text-secondary-900 font-medium text-right"
+                    >{{ formatCell(cell, { format_type: 'currency' }) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Dynamic Signature Section from footer_bands config (full-width) -->
+            <div
+              v-if="signatureItems.length > 0"
+              class="flex gap-4 mt-4 pt-3 border-t border-secondary-300"
+            >
+              <div
+                v-for="sig in signatureItems"
+                :key="sig.label"
+                class="flex-1 text-center"
+                :class="{
+                  'text-left': sig.position === 'left',
+                  'text-center': !sig.position || sig.position === 'center',
+                  'text-right': sig.position === 'right'
+                }"
+              >
+                <p class="text-xs text-secondary-500 mb-8">{{ sig.label }}</p>
+                <p class="text-xs text-secondary-700">(....................)</p>
               </div>
             </div>
           </div>
@@ -518,6 +548,12 @@ const t1SummaryData = computed(() => {
     const saldoGiroTolakan = parseFloat(data.SaldoGiroTolakan || 0)
     const totalBonGiro = saldoGiro + saldoBon + saldoBonD + saldoBonE + saldoBonA + saldoBonDH + saldoGiroTolakan
     data.Tunai = (sumDebet + sumDebet2 + saldoAwal - sumKredit - sumKredit2) - totalBonGiro
+
+    // Expose raw T2 sums for footer_table Jumlah row
+    data.sumDebet = sumDebet
+    data.sumKredit = sumKredit
+    data.sumDebet2 = sumDebet2
+    data.sumKredit2 = sumKredit2
   }
 
   return data
@@ -560,21 +596,68 @@ const t1LeftFields = computed(() => {
 })
 
 // Summary Right Column Fields (totals from SP)
-// Empty when using grid_1col (Bank Harian pattern: all fields in single column)
+// Reads from config_json.right_fields; falls back to all T1 columns (Kas Harian pattern)
 const t1RightFields = computed(() => {
   if (!summaryDatasetName.value) return []
   if (!reportStore.currentReport?.columns?.[summaryDatasetName.value]) return []
   if (summaryColumnCount.value === 1) return []
 
-  // T1 from SP has: SaldoAwalD, SaldoAkhirD, TotalD (computed values)
-  return [
-    { key: 'TotalD', label: 'Total' },
-    { key: 'TotalK', label: 'Total (K)' },
-    { key: 'SaldoAwalD', label: 'Saldo Awal' },
-    { key: 'SaldoAkhirD', label: 'Saldo Akhir' },
-    { key: 'SaldoAwalK', label: 'Saldo Awal (K)' },
-    { key: 'SaldoAkhirK', label: 'Saldo Akhir (K)' }
-  ]
+  const datasets = reportStore.currentReport?.datasets || []
+  const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary')
+  const rightFields = summaryDs?.config_json?.right_fields
+
+  const summaryCols = reportStore.currentReport.columns[summaryDatasetName.value]
+
+  if (rightFields && Array.isArray(rightFields)) {
+    return summaryCols
+      .filter((c: any) => rightFields.includes(c.nama_kolom))
+      .map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom, column: c }))
+  }
+
+  return summaryCols.map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom, column: c }))
+})
+
+// Footer Table from footer_bands config (rows × columns matrix)
+const footerTable = computed(() => {
+  const ft = reportStore.currentReport?.footer_bands?.bands?.summary?.footer_table
+  if (!ft?.rows?.length || !ft?.columns?.length) return null
+
+  const sumName = summaryDatasetName.value
+  const detName = detailDatasets.value[0]?.nama_dataset
+  const t1 = sumName ? reportStore.datasets[sumName]?.[0] : null
+  const t2 = detName ? (reportStore.datasets[detName] || []) : []
+
+  // Map display label → data key
+  const rowKeyMap: Record<string, string> = {
+    'Jumlah': 'sumDebet',
+    'Saldo Awal': 'SaldoAwalD',
+    'Saldo Akhir': 'SaldoAkhirD',
+    'Kontrol': 'TotalD'
+  }
+
+  // Map display label → T2 column nama_kolom
+  const t2Cols = detName ? (reportStore.currentReport?.columns?.[detName] || []) : []
+  const colFieldMap: Record<string, string> = {}
+  for (const c of t2Cols) {
+    if (c.label_tampil) colFieldMap[c.label_tampil] = c.nama_kolom
+  }
+
+  return {
+    columns: ft.columns,
+    rows: ft.rows.map(rowLabel => ({
+      label: rowLabel,
+      cells: ft.columns.map(colLabel => {
+        if (rowLabel === 'Jumlah') {
+          const field = colFieldMap[colLabel]
+          if (!field) return 0
+          return t2.reduce((s: number, r: any) => s + parseFloat(r[field] || 0), 0)
+        }
+        const key = rowKeyMap[rowLabel]
+        if (!key || !t1) return 0
+        return parseFloat(t1[key] || 0)
+      })
+    }))
+  }
 })
 
 // Get signature items from footer_bands config
@@ -582,23 +665,6 @@ const signatureItems = computed(() => {
   const footerBands = reportStore.currentReport?.footer_bands
   if (!footerBands?.bands?.summary?.signatures) return []
   return footerBands.bands.summary.signatures
-})
-
-// Get grid class for signature layout
-const signatureGridClass = computed(() => {
-  const footerBands = reportStore.currentReport?.footer_bands
-  const cols = footerBands?.bands?.summary?.layout?.columns || signatureItems.value.length
-  const alignment = footerBands?.bands?.summary?.layout?.alignment || 'spread'
-
-  // Map alignment to tailwind classes
-  const alignClass = {
-    left: 'justify-start',
-    center: 'justify-center',
-    right: 'justify-end',
-    spread: 'justify-between'
-  }[alignment] || 'justify-between'
-
-  return `grid-cols-${Math.min(cols, 6)} ${alignClass}`
 })
 
 function getT1Label(key: string): string {

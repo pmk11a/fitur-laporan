@@ -13,6 +13,7 @@ export interface FooterBandsConfig {
       layout?: { columns: number; alignment: string }
       signatures?: { label: string; position: string }[]
       notes?: { enabled: boolean; label: string; placeholder?: string }
+      footer_table?: { rows: string[]; columns: string[] }
     }
     groups?: { field: string; label: string; showInHeader?: boolean; showSubtotal?: boolean }[]
   }
@@ -59,6 +60,8 @@ export interface DatasetConfig {
   config_json?: {
     display_role?: 'summary' | 'detail'
     summary_layout?: 'grid_2col' | 'grid_1col'
+    summary_fields?: string[]
+    right_fields?: string[]
   }
 }
 
