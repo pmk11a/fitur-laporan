@@ -103,6 +103,47 @@
               </div>
             </div>
 
+            <div v-if="form.config_json.display_role === 'summary'" class="space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-secondary-700 mb-1">Field Summary (kiri)</label>
+                <p class="text-xs text-secondary-500 mb-2">Pilih kolom T1 yang tampil di kolom kiri footer. Kosongkan = semua kolom T1.</p>
+                <div v-if="availableDatasetColumns.length === 0" class="text-xs text-secondary-400 italic">
+                  Belum ada kolom di dataset ini. Tambahkan kolom di tab Kolom terlebih dahulu.
+                </div>
+                <div v-else class="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto border border-secondary-200 rounded p-2 bg-secondary-50">
+                  <label v-for="col in availableDatasetColumns" :key="col.nama_kolom" class="flex items-center gap-2 text-xs cursor-pointer hover:bg-white px-1 py-0.5 rounded">
+                    <input
+                      type="checkbox"
+                      :value="col.nama_kolom"
+                      v-model="form.config_json.summary_fields"
+                      class="rounded border-secondary-300 text-primary-500"
+                    />
+                    <span class="font-mono">{{ col.nama_kolom }}</span>
+                    <span class="text-secondary-400 truncate">{{ col.label_tampil }}</span>
+                  </label>
+                </div>
+              </div>
+              <div v-if="form.config_json.summary_layout !== 'grid_1col'">
+                <label class="block text-sm font-medium text-secondary-700 mb-1">Field Summary (kanan)</label>
+                <p class="text-xs text-secondary-500 mb-2">Pilih kolom T1 yang tampil di kolom kanan footer. Kosongkan = semua kolom T1.</p>
+                <div v-if="availableDatasetColumns.length === 0" class="text-xs text-secondary-400 italic">
+                  Belum ada kolom di dataset ini.
+                </div>
+                <div v-else class="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto border border-secondary-200 rounded p-2 bg-secondary-50">
+                  <label v-for="col in availableDatasetColumns" :key="col.nama_kolom" class="flex items-center gap-2 text-xs cursor-pointer hover:bg-white px-1 py-0.5 rounded">
+                    <input
+                      type="checkbox"
+                      :value="col.nama_kolom"
+                      v-model="form.config_json.right_fields"
+                      class="rounded border-secondary-300 text-primary-500"
+                    />
+                    <span class="font-mono">{{ col.nama_kolom }}</span>
+                    <span class="text-secondary-400 truncate">{{ col.label_tampil }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <div class="flex items-center gap-2">
               <input
                 id="dataset-visible"
@@ -198,8 +239,17 @@ const form = reactive({
   visible: true,
   config_json: {
     display_role: '',
-    summary_layout: 'grid_2col'
+    summary_layout: 'grid_2col',
+    summary_fields: [] as string[],
+    right_fields: [] as string[]
   }
+})
+
+const availableDatasetColumns = computed(() => {
+  const dsName = editingDataset.value?.nama_dataset || form.nama_dataset
+  if (!dsName) return []
+  const cols = store.selectedReportData?.columns?.[dsName] || []
+  return cols.filter((c: any) => c.is_visible !== false)
 })
 
 function openModal(ds?: AdminDataset) {
@@ -213,11 +263,20 @@ function openModal(ds?: AdminDataset) {
       visible: ds.visible !== false,
       config_json: {
         display_role: ds.config_json?.display_role || '',
-        summary_layout: ds.config_json?.summary_layout || 'grid_2col'
+        summary_layout: ds.config_json?.summary_layout || 'grid_2col',
+        summary_fields: ds.config_json?.summary_fields || [],
+        right_fields: ds.config_json?.right_fields || []
       }
     })
   } else {
-    Object.assign(form, { nama_dataset: '', query_sumber_data: '', deskripsi: '', urutan: 1, visible: true, config_json: { display_role: '', summary_layout: 'grid_2col' } })
+    Object.assign(form, {
+      nama_dataset: '',
+      query_sumber_data: '',
+      deskripsi: '',
+      urutan: 1,
+      visible: true,
+      config_json: { display_role: '', summary_layout: 'grid_2col', summary_fields: [], right_fields: [] }
+    })
   }
   showModal.value = true
 }

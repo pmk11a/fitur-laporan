@@ -34,8 +34,9 @@ GO
 -- 1. dbmasterlaporan - reset + insert
 -- =============================================
 DELETE FROM dbmasterlaporan WHERE KODEMENU = '020102';
-INSERT INTO dbmasterlaporan (KODEMENU, nama_laporan, deskripsi, query_sumber_data, status_aktif)
-VALUES ('020102', 'Bank Harian', 'Laporan bank harian dengan mutasi transaksi bank', 'sp_LapBankHarian', 1);
+INSERT INTO dbmasterlaporan (KODEMENU, nama_laporan, deskripsi, query_sumber_data, status_aktif, footer_bands)
+VALUES ('020102', 'Bank Harian', 'Laporan bank harian dengan mutasi transaksi bank', 'sp_LapBankHarian', 1,
+'{"bands":{"title":{"enabled":true,"content":"LAPORAN BANK HARIAN","align":"center"},"pageHeader":{"enabled":true},"summary":{"enabled":true,"footer_table":{"rows":["Jumlah","Saldo Awal","Saldo Akhir","Kontrol"],"columns":["Penerimaan","Pengeluaran"]},"signatures":[{"label":"Pimpinan","position":"left"},{"label":"Kontrol","position":"center"},{"label":"Kasir","position":"right"}]}}}');
 GO
 
 -- =============================================
@@ -47,7 +48,7 @@ SET @IdLap = (SELECT id_laporan FROM dbmasterlaporan WHERE KODEMENU = '020102');
 
 DELETE FROM dbquerylaporan WHERE id_laporan = @IdLap;
 INSERT INTO dbquerylaporan (id_laporan, nama_dataset, query_sumber_data, deskripsi, urutan, config_json) VALUES
-    (@IdLap, 'T1', 'EXEC Sp_LapSaldoAwal @Perkiraan, @TglAwal, @TglAkhir, @Divisi',     'Saldo awal sebelum periode',                   1, '{"display_role":"summary"}'),
+    (@IdLap, 'T1', 'EXEC Sp_LapSaldoAwal @Perkiraan, @TglAwal, @TglAkhir, @Divisi',     'Saldo awal sebelum periode',                   1, '{"display_role":"summary","summary_layout":"grid_2col","summary_fields":["SaldoAwalD","SaldoAkhirD","TotalD","SaldoAwalK","SaldoAkhirK","TotalK"],"right_fields":["TotalD","TotalK","SaldoAwalD","SaldoAkhirD","SaldoAwalK","SaldoAkhirK"]}'),
     (@IdLap, 'T2', 'EXEC Sp_LapBankHarian @Perkiraan, @TglAwal, @TglAkhir, @Divisi',    'Mutasi transaksi bank (penerimaan/pengeluaran)', 2, '{"display_role":"detail"}'),
     (@IdLap, 'T3', 'EXEC Sp_LapBankHarian @Perkiraan, @TglAwal, @TglAkhir, @Divisi',    'Saldo riil dan perubahan harian',              3, '{"display_role":"detail"}');
 GO

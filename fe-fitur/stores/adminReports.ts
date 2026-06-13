@@ -41,6 +41,8 @@ export interface AdminDataset {
   config_json?: {
     display_role?: 'summary' | 'detail'
     summary_layout?: 'grid_2col' | 'grid_1col'
+    summary_fields?: string[]
+    right_fields?: string[]
   }
 }
 
