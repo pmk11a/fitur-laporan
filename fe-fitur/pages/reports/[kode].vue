@@ -397,10 +397,10 @@
                   <tr>
                     <th class="text-left py-1 pr-4 text-secondary-600 font-medium w-1/3"></th>
                     <th
-                      v-for="colLabel in footerTable.columns"
-                      :key="colLabel"
+                      v-for="col in footerTable.columns"
+                      :key="typeof col === 'object' ? col.label : col"
                       class="text-right py-1 px-4 text-secondary-600 font-medium"
-                    >{{ colLabel }}</th>
+                    >{{ typeof col === 'object' ? col.label : col }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -518,22 +518,14 @@ const t1SummaryData = computed(() => {
     const sumDebet2 = t2.reduce((sum: number, row: any) => sum + parseFloat(row.debet2 || 0), 0)
     const sumKredit2 = t2.reduce((sum: number, row: any) => sum + parseFloat(row.kredit2 || 0), 0)
 
-    // Base values from T1 SP
-    const saldoAwal = parseFloat(data.SaldoAwal || 0)
-    const saldoAwalD = parseFloat(data.SaldoAwalD || 0)
-    const saldoAwalK = parseFloat(data.SaldoAwalK || 0)
-
-    // SaldoAkhirD = SaldoAwal + SUM(debet) - SUM(kredit) - SUM(kredit2)
-    data.SaldoAkhirD = saldoAwal + sumDebet + sumDebet2 - sumKredit - sumKredit2
-
-    // SaldoAkhirK = SaldoAwal + SUM(debet2) - SUM(kredit2)
-    data.SaldoAkhirK = saldoAwal + sumDebet2 - sumKredit2
-
-    // TotalD = SUM(debet) + SaldoAwalD + SaldoAkhirD
-    data.TotalD = sumDebet + saldoAwalD + data.SaldoAkhirD
-
-    // TotalK = SUM(kredit) + SaldoAwalK + SaldoAkhirK
-    data.TotalK = sumKredit + saldoAwalK + data.SaldoAkhirK
+    // Base values from T1 SP — SP already has all D/K calculated
+    // Only use T2 sums if T1 SP doesn't have them
+    data.SaldoAwalD = data.SaldoAwalD ?? 0
+    data.SaldoAwalK = data.SaldoAwalK ?? 0
+    data.SaldoAkhirD = data.SaldoAkhirD ?? 0
+    data.SaldoAkhirK = data.SaldoAkhirK ?? 0
+    data.TotalD = data.TotalD ?? 0
+    data.TotalK = data.TotalK ?? 0
 
     // Saldo = if SaldoAkhirD > 0 then SaldoAkhirD else SaldoAkhirK
     data.Saldo = data.SaldoAkhirD > 0 ? data.SaldoAkhirD : data.SaldoAkhirK
@@ -617,46 +609,132 @@ const t1RightFields = computed(() => {
   return summaryCols.map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom, column: c }))
 })
 
-// Footer Table from footer_bands config (rows × columns matrix)
+// Footer Table from footer_bands config (dynamic rows × columns)
+// Supports 2 row formats:
+//   Legacy (label display):   rows: ["Jumlah", "Saldo Awal"]
+//   New (nama_kolom):         rows: ["SaldoAwalD", "TotalD"]
+//   New (sum config):         rows: [{label:"Jumlah", data_source:"sum", dataset:"T2", field:"Debet"}]
+// Also supports 2 column formats:
+//   Legacy (label display):   columns: ["Penerimaan", "Pengeluaran"]
+//   New (named object):       columns: [{label: "Penerimaan", dataset: "T2", field: "Debet"}]
 const footerTable = computed(() => {
   const ft = reportStore.currentReport?.footer_bands?.bands?.summary?.footer_table
   if (!ft?.rows?.length || !ft?.columns?.length) return null
 
   const sumName = summaryDatasetName.value
   const detName = detailDatasets.value[0]?.nama_dataset
+  // Use t1SummaryData computed for footer table — it has the D/K calculated fields
+  const t1Summary = t1SummaryData.value
   const t1 = sumName ? reportStore.datasets[sumName]?.[0] : null
   const t2 = detName ? (reportStore.datasets[detName] || []) : []
 
-  // Map display label → data key
-  const rowKeyMap: Record<string, string> = {
-    'Jumlah': 'sumDebet',
-    'Saldo Awal': 'SaldoAwalD',
-    'Saldo Akhir': 'SaldoAkhirD',
-    'Kontrol': 'TotalD'
+  // Map label_tampil → nama_kolom for all datasets (legacy support)
+  const fieldMaps: Record<string, Record<string, string>> = {}
+  for (const [dsName, cols] of Object.entries(reportStore.currentReport?.columns || {})) {
+    const map: Record<string, string> = {}
+    for (const c of cols) {
+      if (c.label_tampil) map[c.label_tampil] = c.nama_kolom
+    }
+    fieldMaps[dsName] = map
   }
 
-  // Map display label → T2 column nama_kolom
-  const t2Cols = detName ? (reportStore.currentReport?.columns?.[detName] || []) : []
-  const colFieldMap: Record<string, string> = {}
-  for (const c of t2Cols) {
-    if (c.label_tampil) colFieldMap[c.label_tampil] = c.nama_kolom
+  // Normalize columns to objects: [{label, dataset?, field?}]
+  const normCols = (ft.columns as any[]).map(col => {
+    if (typeof col === 'object') return col
+    return { label: col }
+  })
+
+  const getCellValue = (datasetName: string, fieldName: string): number => {
+    const dataset = reportStore.datasets[datasetName]
+    if (!dataset) return 0
+    const firstRow = dataset[0]
+    return parseFloat(firstRow[fieldName] || 0)
+  }
+
+  const sumDataset = (datasetName: string, fieldName: string): number => {
+    const dataset = reportStore.datasets[datasetName] || []
+    return dataset.reduce((s: number, r: any) => s + parseFloat(r[fieldName] || 0), 0)
   }
 
   return {
     columns: ft.columns,
-    rows: ft.rows.map(rowLabel => ({
-      label: rowLabel,
-      cells: ft.columns.map(colLabel => {
-        if (rowLabel === 'Jumlah') {
-          const field = colFieldMap[colLabel]
-          if (!field) return 0
-          return t2.reduce((s: number, r: any) => s + parseFloat(r[field] || 0), 0)
+    rows: ft.rows.map(row => {
+      // Normalize row: support both string and object
+      const rowDef: { label: string; data_source?: string; dataset?: string; field?: string; fields?: string[] } =
+        typeof row === 'string' ? { label: row } : { ...row }
+
+      // Determine which dataset this row reads from
+      const isSumRow = rowDef.data_source === 'sum'
+      const rowDataset = isSumRow ? (rowDef.dataset || detName) : sumName
+      const isT1Row = rowDataset === sumName
+      const rowData = isT1Row ? t1 : undefined
+
+      const cells = normCols.map(colDef => {
+        // Column config has explicit dataset + field
+        if (colDef.dataset && colDef.field) {
+          // Sum row: sum the specified dataset + field
+          if (isSumRow) {
+            return sumDataset(colDef.dataset, colDef.field)
+          }
+          // T1 row: resolve D/K value based on column direction
+          if (t1Summary) {
+            const t1RowField = rowDef.field
+            if (t1RowField) {
+              // If field name ends with D/K and matches column suffix → use directly
+              const dirSuffix = colDef.field.toLowerCase() === 'kredit' ? 'K' : 'D'
+              if (t1RowField.endsWith(dirSuffix)) {
+                return parseFloat(t1Summary[t1RowField] || 0)
+              }
+              // Field is base name (no suffix): try base + suffix
+              const t1FieldName = t1RowField + dirSuffix
+              if (t1Summary[t1FieldName] !== undefined) {
+                return parseFloat(t1Summary[t1FieldName] || 0)
+              }
+              // Try base field as-is (backward compat)
+              return parseFloat(t1Summary[t1RowField] || 0)
+            }
+          }
+          // Fallback to raw T1
+          if (rowData) {
+            const t1RowField = rowDef.field
+            if (t1RowField) {
+              const dirSuffix = colDef.field.toLowerCase() === 'kredit' ? 'K' : 'D'
+              if (t1RowField.endsWith(dirSuffix)) {
+                return parseFloat(rowData[t1RowField] || 0)
+              }
+              const t1FieldName = t1RowField + dirSuffix
+              if (rowData[t1FieldName] !== undefined) {
+                return parseFloat(rowData[t1FieldName] || 0)
+              }
+              return parseFloat(rowData[t1RowField] || 0)
+            }
+          }
         }
-        const key = rowKeyMap[rowLabel]
-        if (!key || !t1) return 0
-        return parseFloat(t1[key] || 0)
+
+        const colLabel = colDef.label
+
+        // Legacy: match colDef.label via label_tampil in T1
+        const t1ColMap = sumName ? fieldMaps[sumName] : {}
+        const t2ColMap = detName ? fieldMaps[detName] : {}
+        const t1Key = t1ColMap?.[colLabel]
+        if (t1Key && t1Summary && t1Summary[t1Key] !== undefined) {
+          return parseFloat(t1Summary[t1Key] || 0)
+        }
+        if (t1Key && t1) {
+          return parseFloat(t1[t1Key] || 0)
+        }
+
+        // Legacy: match colDef.label via label_tampil in T2, sum it
+        const t2Key = t2ColMap?.[colLabel]
+        if (t2Key) {
+          return sumDataset(detName!, t2Key)
+        }
+
+        return 0
       })
-    }))
+
+      return { label: rowDef.label, cells }
+    })
   }
 })
 
