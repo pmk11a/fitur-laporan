@@ -99,6 +99,20 @@ SET @IdLap = (SELECT id_laporan FROM dbmasterlaporan WHERE KODEMENU = '020102');
 DELETE FROM dbgrouplaporan WHERE id_laporan = @IdLap;
 GO
 
+-- =============================================
+-- 5. dbparameterlaporan (filter parameters for stored procedures)
+-- Parameters: @Perkiraan, @TglAwal, @TglAkhir, @Divisi
+-- =============================================
+DECLARE @IdLap INT;
+SET @IdLap = (SELECT id_laporan FROM dbmasterlaporan WHERE KODEMENU = '020102');
+DELETE FROM dbparameterlaporan WHERE id_laporan = @IdLap;
+INSERT INTO dbparameterlaporan (id_laporan, nama_filter, label, tipe_input, wajib_isi, nilai_default, posisi) VALUES
+    (@IdLap, 'Perkiraan',  'Perkiraan Bank', 'browse', 0, NULL, 1),
+    (@IdLap, 'TglAwal',   'Tanggal Awal',   'date',   1, NULL, 2),
+    (@IdLap, 'TglAkhir',  'Tanggal Akhir',  'date',   1, NULL, 3),
+    (@IdLap, 'Divisi',    'Divisi',         'browse', 0, NULL, 4);
+GO
+
 -- ============================================================
 -- DONE: Report 020102 - Bank Harian
 -- ============================================================
