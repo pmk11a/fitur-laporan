@@ -742,14 +742,14 @@ const effectiveFilters = computed(() => {
 // Summary dataset — driven by config_json.display_role, not hardcoded 'T1'
 const summaryDatasetName = computed(() => {
   const datasets = reportStore.currentReport?.datasets || []
-  const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary')
+  const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary' && d.visible !== 0)
   return summaryDs?.nama_dataset || null
 })
 
 // Detail datasets — all datasets that are NOT summary
 const detailDatasets = computed(() => {
   const datasets = reportStore.currentReport?.datasets || []
-  return datasets.filter((d: any) => d.config_json?.display_role !== 'summary')
+  return datasets.filter((d: any) => d.config_json?.display_role !== 'summary' && d.visible !== 0)
 })
 
 // Number of columns for summary section (from config_json.summary_layout)
