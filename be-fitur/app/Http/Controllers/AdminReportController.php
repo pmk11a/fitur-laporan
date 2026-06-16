@@ -166,10 +166,19 @@ class AdminReportController extends Controller
             'config_json' => 'nullable|array',
             'config_json.display_role' => 'nullable|string|in:summary,detail',
             'config_json.summary_layout' => 'nullable|string|in:grid_2col,grid_1col',
+            'config_json.detail_dataset' => 'nullable|string|max:50',
+            'config_json.t2_sum_fields' => 'nullable|array',
+            'config_json.t2_sum_fields.*' => 'string',
+            'config_json.bon_giro_fields' => 'nullable|array',
+            'config_json.bon_giro_fields.*' => 'string',
             'config_json.summary_fields' => 'nullable|array',
             'config_json.summary_fields.*' => 'string',
             'config_json.right_fields' => 'nullable|array',
             'config_json.right_fields.*' => 'string',
+            'config_json.computed' => 'nullable|array',
+            'config_json.computed.*.expression' => 'nullable|string',
+            'config_json.computed.*.operands' => 'nullable|array',
+            'config_json.computed.*.operands.*' => 'string|in:t1,sum:t1,sum:t2',
         ]);
 
         $result = $this->service->createDataset($id, $data);
@@ -188,10 +197,19 @@ class AdminReportController extends Controller
             'config_json' => 'nullable|array',
             'config_json.display_role' => 'nullable|string|in:summary,detail',
             'config_json.summary_layout' => 'nullable|string|in:grid_2col,grid_1col',
+            'config_json.detail_dataset' => 'nullable|string|max:50',
+            'config_json.t2_sum_fields' => 'nullable|array',
+            'config_json.t2_sum_fields.*' => 'string',
+            'config_json.bon_giro_fields' => 'nullable|array',
+            'config_json.bon_giro_fields.*' => 'string',
             'config_json.summary_fields' => 'nullable|array',
             'config_json.summary_fields.*' => 'string',
             'config_json.right_fields' => 'nullable|array',
             'config_json.right_fields.*' => 'string',
+            'config_json.computed' => 'nullable|array',
+            'config_json.computed.*.expression' => 'nullable|string',
+            'config_json.computed.*.operands' => 'nullable|array',
+            'config_json.computed.*.operands.*' => 'string|in:t1,sum:t1,sum:t2',
         ]);
 
         $this->service->updateDataset($did, $data);

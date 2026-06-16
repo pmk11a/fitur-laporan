@@ -301,7 +301,7 @@ class ReportService
     {
         try {
             $queries = DB::connection('sqlsrv')->select(
-                "SELECT * FROM dbquerylaporan WHERE id_laporan = ? AND visible = 1 ORDER BY urutan",
+                "SELECT * FROM dbquerylaporan WHERE id_laporan = ? ORDER BY urutan",
                 [$idLaporan]
             );
 
@@ -432,6 +432,7 @@ class ReportService
 
             // Execute each query in dbquerylaporan
             foreach ($config['datasets'] ?? [] as $dataset) {
+                if (!($dataset['visible'] ?? true)) continue;
                 try {
                     $data = $this->executeQuery($dataset['nama_dataset'], $dataset['id_query'], $filters);
                     $datasets[$dataset['nama_dataset']] = $data;
@@ -466,8 +467,10 @@ class ReportService
                     }
                 }
                 // For backward compatibility, also set first dataset as root
-                if (isset($config['datasets'][0]['nama_dataset'])) {
-                    $firstDataset = $config['datasets'][0]['nama_dataset'];
+                $firstVisible = collect($config['datasets'] ?? [])
+                    ->first(fn($d) => ($d['visible'] ?? true));
+                if ($firstVisible) {
+                    $firstDataset = $firstVisible['nama_dataset'];
                     $groupedData['_main'] = $groupedData[$firstDataset] ?? null;
                 }
             }
