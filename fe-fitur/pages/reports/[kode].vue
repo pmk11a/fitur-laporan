@@ -499,54 +499,104 @@ const columnLabels = computed(() => {
 
 // T1 Summary Data (for multi-dataset reports like Kas Harian)
 // Include calculated fields from T2 transactions (mimics .fr3 FastReport script)
+// All field/formula selection is config-driven via summary dataset's config_json:
+//   - t2_sum_fields: string[]   columns on detail dataset to SUM (e.g. ["Debet","kredit","debet2","kredit2"])
+//   - bon_giro_fields: string[] T1 columns to SUM into TotalBonGiro
+//   - computed: { [target]: { expression, operands } }
+//       expression: arithmetic string with tokens, e.g. "sum(Debet) + SaldoAwal - sum(kredit) - TotalBonGiro"
+//       operands: map of token -> source (e.g. { Debet: "sum:t2", SaldoAwal: "t1" })
+type T1ComputedRule = {
+  expression: string
+  operands: Record<string, 't1' | 'sum:t1' | 'sum:t2'>
+}
+type T1SummaryConfig = {
+  detail_dataset?: string
+  t2_sum_fields?: string[]
+  bon_giro_fields?: string[]
+  computed?: Record<string, T1ComputedRule>
+}
+
+const num = (v: any) => parseFloat(v || 0) || 0
+
+const evalT1Expression = (
+  expression: string,
+  operands: Record<string, 't1' | 'sum:t1' | 'sum:t2'>,
+  ctx: { t1: Record<string, number>; t1Sums: Record<string, number>; t2Sums: Record<string, number> }
+): number => {
+  // Replace `name(name)` function calls first (e.g. `sum(Debet)`)
+  // Then replace remaining bare tokens (e.g. `SaldoAwal`)
+  let replaced = expression.replace(/([A-Za-z_][A-Za-z0-9_]*)\(([A-Za-z_][A-Za-z0-9_]*)\)/g, (_whole, fn, arg) => {
+    if (fn !== 'sum') throw new Error(`Unknown function: ${fn}`)
+    const src = operands[arg]
+    if (src === 'sum:t2') return String(ctx.t2Sums[arg] ?? 0)
+    if (src === 'sum:t1') return String(ctx.t1Sums[arg] ?? 0)
+    throw new Error(`sum() operand "${arg}" must be sum:t1 or sum:t2`)
+  })
+  replaced = replaced.replace(/[A-Za-z_][A-Za-z0-9_]*/g, (tok) => {
+    const src = operands[tok]
+    if (src === 't1') return String(ctx.t1[tok] ?? 0)
+    if (!src) throw new Error(`Unknown token: ${tok}`)
+    throw new Error(`Operand "${tok}" must be t1 (use sum(${tok}) for aggregates)`)
+  })
+  // Whitelist: digits, operators (arith + comparison + ternary), parens, decimal, whitespace
+  if (!/^[\d\s+\-*/().?:%<>!=&|]+$/.test(replaced)) {
+    throw new Error(`Expression contains invalid characters: ${replaced}`)
+  }
+  // eslint-disable-next-line no-new-func
+  const fn = new Function(`"use strict"; return (${replaced});`)
+  const result = fn()
+  return typeof result === 'number' && isFinite(result) ? result : 0
+}
+
 const t1SummaryData = computed(() => {
   const sumName = summaryDatasetName.value
-  const detName = detailDatasets.value[0]?.nama_dataset
-
   if (!sumName) return null
 
+  const summaryDs = reportStore.currentReport?.datasets?.find(
+    (d: any) => d.config_json?.display_role === 'summary' && d.nama_dataset === sumName
+  )
+  const cfg: T1SummaryConfig = (summaryDs?.config_json as T1SummaryConfig) || {}
+
+  const detName = cfg.detail_dataset || detailDatasets.value[0]?.nama_dataset
   const t1 = reportStore.datasets[sumName]
   const t2 = detName ? reportStore.datasets[detName] : null
   if (!t1 || t1.length === 0) return null
 
-  const data = { ...t1[0] }
+  const data: Record<string, any> = { ...t1[0] }
 
-  if (t2 && t2.length > 0) {
-    // Sum all transaction columns
-    const sumDebet = t2.reduce((sum: number, row: any) => sum + parseFloat(row.Debet || 0), 0)
-    const sumKredit = t2.reduce((sum: number, row: any) => sum + parseFloat(row.kredit || 0), 0)
-    const sumDebet2 = t2.reduce((sum: number, row: any) => sum + parseFloat(row.debet2 || 0), 0)
-    const sumKredit2 = t2.reduce((sum: number, row: any) => sum + parseFloat(row.kredit2 || 0), 0)
+  // T2 aggregates (config-driven)
+  const t2SumFields = cfg.t2_sum_fields || []
+  const t2Sums: Record<string, number> = {}
+  t2SumFields.forEach((f) => {
+    t2Sums[f] = t2 ? t2.reduce((s: number, r: any) => s + num(r[f]), 0) : 0
+  })
 
-    // Base values from T1 SP — SP already has all D/K calculated
-    // Only use T2 sums if T1 SP doesn't have them
-    data.SaldoAwalD = data.SaldoAwalD ?? 0
-    data.SaldoAwalK = data.SaldoAwalK ?? 0
-    data.SaldoAkhirD = data.SaldoAkhirD ?? 0
-    data.SaldoAkhirK = data.SaldoAkhirK ?? 0
-    data.TotalD = data.TotalD ?? 0
-    data.TotalK = data.TotalK ?? 0
-
-    // Saldo = if SaldoAkhirD > 0 then SaldoAkhirD else SaldoAkhirK
-    data.Saldo = data.SaldoAkhirD > 0 ? data.SaldoAkhirD : data.SaldoAkhirK
-
-    // Tunai = (SUM(debet) + SUM(debet2) + SaldoAwal - SUM(kredit) - SUM(kredit2)) - TotalBonGiro
-    const saldoGiro = parseFloat(data.SaldoGiro || 0)
-    const saldoBon = parseFloat(data.SaldoBon || 0)
-    const saldoBonD = parseFloat(data.SaldoBonD || 0)
-    const saldoBonE = parseFloat(data.SaldoBonE || 0)
-    const saldoBonA = parseFloat(data.SaldoBonA || 0)
-    const saldoBonDH = parseFloat(data.SaldoBonDH || 0)
-    const saldoGiroTolakan = parseFloat(data.SaldoGiroTolakan || 0)
-    const totalBonGiro = saldoGiro + saldoBon + saldoBonD + saldoBonE + saldoBonA + saldoBonDH + saldoGiroTolakan
-    data.Tunai = (sumDebet + sumDebet2 + saldoAwal - sumKredit - sumKredit2) - totalBonGiro
-
-    // Expose raw T2 sums for footer_table Jumlah row
-    data.sumDebet = sumDebet
-    data.sumKredit = sumKredit
-    data.sumDebet2 = sumDebet2
-    data.sumKredit2 = sumKredit2
+  // T1 aggregates (config-driven, e.g. TotalBonGiro)
+  const t1Sums: Record<string, number> = {}
+  if (cfg.bon_giro_fields?.length) {
+    cfg.bon_giro_fields.forEach((f) => { t1Sums[f] = num(data[f]) })
+    // Expose TotalBonGiro as the sum of all bon_giro_fields for use in computed expressions
+    t1Sums['TotalBonGiro'] = cfg.bon_giro_fields.reduce((s, f) => s + (t1Sums[f] || 0), 0)
   }
+
+  // Built-in helpers (always available)
+  const t1Nums: Record<string, number> = {}
+  Object.keys(data).forEach((k) => { t1Nums[k] = num(data[k]) })
+
+  // Apply computed rules (config-driven)
+  if (cfg.computed) {
+    for (const [target, rule] of Object.entries(cfg.computed)) {
+      try {
+        data[target] = evalT1Expression(rule.expression, rule.operands, { t1: t1Nums, t1Sums, t2Sums })
+      } catch (e: any) {
+        console.warn(`[t1SummaryData] computed.${target} failed:`, e?.message)
+        data[target] = 0
+      }
+    }
+  }
+
+  // Expose raw T2 sums for footer_table Jumlah row
+  t2SumFields.forEach((f) => { data[`sum${f}`] = t2Sums[f] })
 
   return data
 })
@@ -820,14 +870,15 @@ const effectiveFilters = computed(() => {
 // Summary dataset — driven by config_json.display_role, not hardcoded 'T1'
 const summaryDatasetName = computed(() => {
   const datasets = reportStore.currentReport?.datasets || []
-  const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary' && d.visible !== 0)
+  const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary' && d.visible)
   return summaryDs?.nama_dataset || null
 })
 
 // Detail datasets — all datasets that are NOT summary
 const detailDatasets = computed(() => {
   const datasets = reportStore.currentReport?.datasets || []
-  return datasets.filter((d: any) => d.config_json?.display_role !== 'summary' && d.visible !== 0)
+  const filtered = datasets.filter((d: any) => d.config_json?.display_role !== 'summary' && d.visible)
+  return filtered
 })
 
 // Number of columns for summary section (from config_json.summary_layout)

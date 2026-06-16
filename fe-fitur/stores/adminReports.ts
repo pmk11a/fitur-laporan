@@ -41,8 +41,15 @@ export interface AdminDataset {
   config_json?: {
     display_role?: 'summary' | 'detail'
     summary_layout?: 'grid_2col' | 'grid_1col'
+    detail_dataset?: string
+    t2_sum_fields?: string[]
+    bon_giro_fields?: string[]
     summary_fields?: string[]
     right_fields?: string[]
+    computed?: Record<string, {
+      expression: string
+      operands: Record<string, 't1' | 'sum:t1' | 'sum:t2'>
+    }>
   }
 }
 

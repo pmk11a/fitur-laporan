@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { useAuthStore } from './auth'
 
 /**
  * Footer Bands Configuration (from dbmasterlaporan.footer_bands)
@@ -60,8 +61,15 @@ export interface DatasetConfig {
   config_json?: {
     display_role?: 'summary' | 'detail'
     summary_layout?: 'grid_2col' | 'grid_1col'
+    detail_dataset?: string
+    t2_sum_fields?: string[]
+    bon_giro_fields?: string[]
     summary_fields?: string[]
     right_fields?: string[]
+    computed?: Record<string, {
+      expression: string
+      operands: Record<string, 't1' | 'sum:t1' | 'sum:t2'>
+    }>
   }
 }
 
@@ -328,6 +336,15 @@ export const useReportStore = defineStore('report', {
           this.groupedData = response.groupedData
           this.grandTotal = response.grandTotal || {}
           this.reportData = Object.values(response.datasets)[0] || []
+          // Update config (datasets, columns) from preview response to stay in sync
+          if (response.config) {
+            // Strip out hidden datasets so FE never sees them
+            const cleanConfig = {
+              ...response.config,
+              datasets: (response.config.datasets || []).filter((d: any) => d.visible !== false)
+            }
+            this.currentReport = { ...this.currentReport, ...cleanConfig }
+          }
           // Update columns from config (for dynamic columns like jumlah2)
           this.columns = response.config?.columns || {}
           // Store groupingConfig from database (no hardcoded patterns)

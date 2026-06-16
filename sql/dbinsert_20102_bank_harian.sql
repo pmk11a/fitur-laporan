@@ -48,9 +48,9 @@ SET @IdLap = (SELECT id_laporan FROM dbmasterlaporan WHERE KODEMENU = '020102');
 
 DELETE FROM dbquerylaporan WHERE id_laporan = @IdLap;
 INSERT INTO dbquerylaporan (id_laporan, nama_dataset, query_sumber_data, deskripsi, urutan, visible, config_json) VALUES
-    (@IdLap, 'T1', 'EXEC Sp_LapSaldoAwal @Perkiraan, @TglAwal, @TglAkhir, @Divisi',     'Saldo awal sebelum periode',                   1, 1, '{"display_role":"summary","summary_layout":"grid_2col","summary_fields":["SaldoAwalD","SaldoAkhirD","TotalD","SaldoAwalK","SaldoAkhirK","TotalK"],"right_fields":["TotalK","SaldoAwalK","SaldoAkhirK"]}'),
+    (@IdLap, 'T1', 'EXEC Sp_LapSaldoAwal @Perkiraan, @TglAwal, @TglAkhir, @Divisi',     'Saldo awal sebelum periode',                   1, 1, '{"display_role":"summary","summary_layout":"grid_2col","detail_dataset":"T2","t2_sum_fields":["Debet","kredit","debet2","kredit2"],"bon_giro_fields":["SaldoGiro","SaldoBon","SaldoBonD","SaldoBonE","SaldoBonA","SaldoBonDH","SaldoGiroTolakan"],"summary_fields":["SaldoAwalD","SaldoAkhirD","TotalD","SaldoAwalK","SaldoAkhirK","TotalK"],"right_fields":["TotalK","SaldoAwalK","SaldoAkhirK"],"computed":{"Saldo":{"expression":"SaldoAkhirD > 0 ? SaldoAkhirD : SaldoAkhirK","operands":{"SaldoAkhirD":"t1","SaldoAkhirK":"t1"}},"Tunai":{"expression":"(sum(Debet) + sum(debet2) + SaldoAwal - sum(kredit) - sum(kredit2)) - sum(TotalBonGiro)","operands":{"Debet":"sum:t2","debet2":"sum:t2","SaldoAwal":"t1","kredit":"sum:t2","kredit2":"sum:t2","TotalBonGiro":"sum:t1"}}}}'),
     (@IdLap, 'T2', 'EXEC Sp_LapBankHarian @Perkiraan, @TglAwal, @TglAkhir, @Divisi',    'Mutasi transaksi bank (penerimaan/pengeluaran)', 2, 1, '{"display_role":"detail"}'),
-    (@IdLap, 'T3', 'EXEC Sp_LapBankHarian @Perkiraan, @TglAwal, @TglAkhir, @Divisi',    'Saldo riil dan perubahan harian',              3, 1, '{"display_role":"detail"}');
+    (@IdLap, 'T3', 'EXEC Sp_LapBankHarian @Perkiraan, @TglAwal, @TglAkhir, @Divisi',    'Saldo riil dan perubahan harian',              3, 0, '{"display_role":"detail"}');
 GO
 
 -- =============================================
