@@ -364,7 +364,7 @@
 
           <!-- T1 Summary Section - Dynamic Column Layout from config_json -->
           <div v-if="t1SummaryData" class="mt-4 border-t-2 border-secondary-300 pt-4 bg-secondary-50">
-            <div :class="`grid grid-cols-${summaryColumnCount} gap-6`">
+            <div v-if="showT1SummaryGrid" :class="`grid grid-cols-${summaryColumnCount} gap-6`">
               <!-- Left Column: Cash Details -->
               <div>
                 <table class="w-full text-sm">
@@ -710,14 +710,37 @@ const footerTable = computed(() => {
     columns: ft.columns,
     rows: ft.rows.map(row => {
       // Normalize row: support both string and object
-      const rowDef: { label: string; data_source?: string; dataset?: string; field?: string; fields?: string[] } =
+      const rowDef: { label: string; data_source?: string; dataset?: string; field?: string; fields?: Record<string, string> } =
         typeof row === 'string' ? { label: row } : { ...row }
 
       // Determine which dataset this row reads from
       const isSumRow = rowDef.data_source === 'sum'
+      const isComputedRow = rowDef.data_source === 'computed'
       const rowDataset = isSumRow ? (rowDef.dataset || detName) : sumName
       const isT1Row = rowDataset === sumName
       const rowData = isT1Row ? t1 : undefined
+
+      // Handle "computed" data_source — reads from t1SummaryData computed properties.
+      // For each column, resolve D/K suffix based on column field (Debet→D, kredit→K).
+      if (isComputedRow && t1Summary) {
+        return {
+          label: rowDef.label,
+          cells: normCols.map(colDef => {
+            // Single-cell mode: explicit field on row (e.g., {label:"Saldo Awal", data_source:"computed", field:"SaldoAwal"})
+            if (rowDef.field) {
+              return parseFloat(t1Summary[rowDef.field] || 0)
+            }
+            // Multi-cell D/K mode: row has 'fields' map {D: '...', K: '...'}
+            //   rowDef.fields = { D: 'SaldoAwalD', K: 'SaldoAwalK' }
+            if (rowDef.fields && colDef.field) {
+              const dirSuffix = colDef.field.toLowerCase() === 'kredit' ? 'K' : 'D'
+              const targetField = rowDef.fields[dirSuffix]
+              if (targetField) return parseFloat(t1Summary[targetField] || 0)
+            }
+            return 0
+          })
+        }
+      }
 
       const cells = normCols.map(colDef => {
         // Column config has explicit dataset + field
@@ -882,11 +905,18 @@ const detailDatasets = computed(() => {
 })
 
 // Number of columns for summary section (from config_json.summary_layout)
-const summaryColumnCount = computed(() => {
+// 'grid_1col' = 1 col, 'grid_2col' = 2 col, 'footer_only' = skip 2-col grid (only show footer_table)
+const summaryLayout = computed(() => {
   const datasets = reportStore.currentReport?.datasets || []
   const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary')
-  return summaryDs?.config_json?.summary_layout === 'grid_1col' ? 1 : 2
+  return summaryDs?.config_json?.summary_layout || 'grid_2col'
 })
+const summaryColumnCount = computed(() => {
+  if (summaryLayout.value === 'grid_1col') return 1
+  if (summaryLayout.value === 'footer_only') return 0
+  return 2
+})
+const showT1SummaryGrid = computed(() => summaryLayout.value !== 'footer_only')
 
 // Side-by-side layout only used when ALL detail datasets have config_json.detail_layout = 'side_by_side'
 // (Neraca special case - Aktiva & Pasiva). Bank Harian with 2 detail datasets (T2 + T3)
