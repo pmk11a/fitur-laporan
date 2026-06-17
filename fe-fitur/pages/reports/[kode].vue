@@ -390,8 +390,31 @@
               </div>
             </div>
 
+            <!-- CH/GB panel + Footer Table row (CH/GB on left, footer table on right when both exist) -->
+            <div
+              v-if="chgbPanel || footerTable"
+              :class="['mt-4 pt-3 border-t border-secondary-300', (chgbPanel && footerTable) ? 'flex gap-6' : '']"
+            >
+            <!-- CH/GB panel (left side of .fr3 Footer1) — independent section, config-driven rows -->
+            <div
+              v-if="chgbPanel"
+              :class="(footerTable) ? 'w-1/3' : 'w-full'"
+            >
+              <table class="w-full text-sm">
+                <tbody>
+                  <tr v-for="row in chgbPanel" :key="row.label">
+                    <td class="py-0.5 pr-4 text-secondary-600 w-1/2">{{ row.label }}</td>
+                    <td class="py-0.5 text-secondary-900 font-medium text-right">{{ formatCell(row.value, { format_type: 'currency' }) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
             <!-- Dynamic Footer Table from footer_bands config -->
-            <div v-if="footerTable" class="mt-4 pt-3 border-t border-secondary-300">
+            <div
+              v-if="footerTable"
+              :class="(chgbPanel) ? 'flex-1' : 'w-full'"
+            >
               <table class="w-full text-sm">
                 <thead>
                   <tr>
@@ -414,6 +437,7 @@
                   </tr>
                 </tbody>
               </table>
+            </div>
             </div>
 
             <!-- Dynamic Signature Section from footer_bands config (full-width) -->
@@ -853,6 +877,52 @@ const footerTable = computed(() => {
       return { label: rowDef.label, cells }
     })
   }
+})
+
+// CH/GB panel — separate from footer_table. Renders left-side detail rows from .fr3 (Uang Tunai, CH/GB, Bon, etc.).
+// Config: footer_bands.bands.summary.chgb_panel = {enabled, rows: [{label, field?, expression?}]}
+//   - field: read raw T1 field by name (e.g. "SaldoGiro")
+//   - expression: arithmetic string evaluated with evalT1Expression (t1 + t2 sums)
+const chgbPanel = computed(() => {
+  const cp = reportStore.currentReport?.footer_bands?.bands?.summary?.chgb_panel
+  if (!cp?.enabled || !cp?.rows?.length) return null
+
+  const sumName = summaryDatasetName.value
+  const detName = detailDatasets.value[0]?.nama_dataset
+  const t1 = sumName ? reportStore.datasets[sumName]?.[0] : null
+  const t2 = detName ? (reportStore.datasets[detName] || []) : []
+
+  const summaryDs = reportStore.currentReport?.datasets?.find(
+    (d: any) => d.config_json?.display_role === 'summary' && d.nama_dataset === sumName
+  )
+  const cfg: T1SummaryConfig = (summaryDs?.config_json as T1SummaryConfig) || {}
+
+  const ctxT1: Record<string, number> = {}
+  if (t1) Object.keys(t1).forEach((k) => { ctxT1[k] = num(t1[k]) })
+  const ctxT1Sums: Record<string, number> = {}
+  if (cfg.bon_giro_fields?.length) {
+    cfg.bon_giro_fields.forEach((f) => { ctxT1Sums[f] = num(t1?.[f]) })
+    ctxT1Sums['TotalBonGiro'] = cfg.bon_giro_fields.reduce((s, f) => s + (ctxT1Sums[f] || 0), 0)
+  }
+  const ctxT2Sums: Record<string, number> = {}
+  ;(cfg.t2_sum_fields || []).forEach((f) => {
+    ctxT2Sums[f] = t2 ? t2.reduce((s: number, r: any) => s + num(r[f]), 0) : 0
+  })
+
+  return cp.rows.map((row: any) => {
+    let value = 0
+    try {
+      if (row.field) {
+        value = parseFloat(t1?.[row.field] || 0)
+      } else if (row.expression) {
+        value = evalT1Expression(row.expression, {}, { t1: ctxT1, t1Sums: ctxT1Sums, t2Sums: ctxT2Sums })
+      }
+    } catch (e: any) {
+      console.warn(`[chgbPanel] row="${row.label}" failed:`, e?.message)
+      value = 0
+    }
+    return { label: row.label, value }
+  })
 })
 
 // Get signature items from footer_bands config
