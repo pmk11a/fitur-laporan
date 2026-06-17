@@ -36,7 +36,7 @@ GO
 DELETE FROM dbmasterlaporan WHERE KODEMENU = '020102';
 INSERT INTO dbmasterlaporan (KODEMENU, nama_laporan, deskripsi, query_sumber_data, status_aktif, footer_bands)
 VALUES ('020102', 'Bank Harian', 'Laporan bank harian dengan mutasi transaksi bank', 'sp_LapBankHarian', 1,
-'{"bands":{"title":{"enabled":true,"content":"LAPORAN BANK HARIAN","align":"center"},"pageHeader":{"enabled":true},"summary":{"enabled":true,"footer_table":{"rows":["Jumlah","Saldo Awal","Saldo Akhir","Kontrol"],"columns":["Penerimaan","Pengeluaran"]},"signatures":[{"label":"Pimpinan","position":"left"},{"label":"Kontrol","position":"center"},{"label":"Kasir","position":"right"}]}}}');
+'{"bands":{"title":{"enabled":true,"content":"LAPORAN BANK HARIAN","align":"center"},"pageHeader":{"enabled":true},"summary":{"enabled":true,"footer_table":{"rows":[{"label":"Jumlah","data_source":"sum","dataset":"T2"},{"label":"Saldo Awal","data_source":"computed","fields":{"D":"SaldoAwalD","K":"SaldoAwalK"}},{"label":"Saldo Akhir","data_source":"computed","fields":{"D":"SaldoAkhirD","K":"SaldoAkhirK"}},{"label":"Kontrol","data_source":"computed","fields":{"D":"TotalD","K":"TotalK"}}],"columns":[{"label":"Penerimaan","dataset":"T2","field":"Debet"},{"label":"Pengeluaran","dataset":"T2","field":"kredit"}]},"signatures":[{"label":"Pimpinan","position":"left"},{"label":"Kontrol","position":"center"},{"label":"Kasir","position":"right"}]}}}');
 GO
 
 -- =============================================
@@ -48,7 +48,17 @@ SET @IdLap = (SELECT id_laporan FROM dbmasterlaporan WHERE KODEMENU = '020102');
 
 DELETE FROM dbquerylaporan WHERE id_laporan = @IdLap;
 INSERT INTO dbquerylaporan (id_laporan, nama_dataset, query_sumber_data, deskripsi, urutan, visible, config_json) VALUES
-    (@IdLap, 'T1', 'EXEC Sp_LapSaldoAwal @Perkiraan, @TglAwal, @TglAkhir, @Divisi',     'Saldo awal sebelum periode',                   1, 1, '{"display_role":"summary","summary_layout":"grid_2col","detail_dataset":"T2","t2_sum_fields":["Debet","kredit","debet2","kredit2"],"bon_giro_fields":["SaldoGiro","SaldoBon","SaldoBonD","SaldoBonE","SaldoBonA","SaldoBonDH","SaldoGiroTolakan"],"summary_fields":["SaldoAwalD","SaldoAkhirD","TotalD","SaldoAwalK","SaldoAkhirK","TotalK"],"right_fields":["TotalK","SaldoAwalK","SaldoAkhirK"],"computed":{"Saldo":{"expression":"SaldoAkhirD > 0 ? SaldoAkhirD : SaldoAkhirK","operands":{"SaldoAkhirD":"t1","SaldoAkhirK":"t1"}},"Tunai":{"expression":"(sum(Debet) + sum(debet2) + SaldoAwal - sum(kredit) - sum(kredit2)) - sum(TotalBonGiro)","operands":{"Debet":"sum:t2","debet2":"sum:t2","SaldoAwal":"t1","kredit":"sum:t2","kredit2":"sum:t2","TotalBonGiro":"sum:t1"}}}}'),
+    -- T1 real fields from Sp_LapSaldoAwal: SaldoAwal, SaldoAwalD, + 7 bon/giro fields
+    -- summary_layout: 'footer_only' = skip 2-column grid; show only footer_table (.fr3 Footer1 style)
+    -- Computed formulas derived from ReportBankHarian.fr3 Footer1OnBeforePrint:
+    --   SaldoAwalD = frxDBData."SaldoAwal"  (SP returns it as SaldoAwal)
+    --   SaldoAkhirK = SaldoAwal + sum(debet) - sum(kredit)
+    --   TotalD = sum(debet) + SaldoAwalD + SaldoAkhirD
+    --   TotalK = sum(kredit) + SaldoAwalK + SaldoAkhirK
+    --   SaldoAkhirD = 0, SaldoAwalK = 0 (always hidden, HideZeros=True in .fr3)
+    -- IMPORTANT: each expression is self-contained (no chain between computed fields)
+    -- because evalT1Expression reads raw T1 + T2 sums, not other computed values.
+    (@IdLap, 'T1', 'EXEC Sp_LapSaldoAwal @Perkiraan, @TglAwal, @TglAkhir, @Divisi',     'Saldo awal sebelum periode',                   1, 1, '{"display_role":"summary","summary_layout":"footer_only","detail_dataset":"T2","t2_sum_fields":["Debet","kredit","Debet2","kredit2"],"bon_giro_fields":["SaldoGiro","SaldoBon","SaldoBonD","SaldoBonE","SaldoBonA","SaldoBonDH","SaldoGiroTolakan"],"computed":{"SaldoAwalD":{"expression":"SaldoAwal","operands":{"SaldoAwal":"t1"}},"SaldoAkhirD":{"expression":"0","operands":{}},"TotalD":{"expression":"sum(Debet) + SaldoAwal + 0","operands":{"Debet":"sum:t2","SaldoAwal":"t1"}},"SaldoAwalK":{"expression":"0","operands":{}},"SaldoAkhirK":{"expression":"SaldoAwal + sum(Debet) - sum(kredit)","operands":{"SaldoAwal":"t1","Debet":"sum:t2","kredit":"sum:t2"}},"TotalK":{"expression":"sum(kredit) + 0 + (SaldoAwal + sum(Debet) - sum(kredit))","operands":{"kredit":"sum:t2","SaldoAwal":"t1","Debet":"sum:t2"}},"Tunai":{"expression":"(SaldoAwal + sum(Debet) - sum(kredit)) - sum(TotalBonGiro)","operands":{"SaldoAwal":"t1","Debet":"sum:t2","kredit":"sum:t2","TotalBonGiro":"sum:t1"}}}}'),
     (@IdLap, 'T2', 'EXEC Sp_LapBankHarian @Perkiraan, @TglAwal, @TglAkhir, @Divisi',    'Mutasi transaksi bank (penerimaan/pengeluaran)', 2, 1, '{"display_role":"detail"}'),
     (@IdLap, 'T3', 'EXEC Sp_LapBankHarian @Perkiraan, @TglAwal, @TglAkhir, @Divisi',    'Saldo riil dan perubahan harian',              3, 0, '{"display_role":"detail"}');
 GO
