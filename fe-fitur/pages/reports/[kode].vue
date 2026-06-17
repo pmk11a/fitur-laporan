@@ -562,8 +562,12 @@ const evalT1Expression = (
   replaced = replaced.replace(/[A-Za-z_][A-Za-z0-9_]*/g, (tok) => {
     const src = operands[tok]
     if (src === 't1') return String(ctx.t1[tok] ?? 0)
-    if (!src) throw new Error(`Unknown token: ${tok}`)
-    throw new Error(`Operand "${tok}" must be t1 (use sum(${tok}) for aggregates)`)
+    if (src) throw new Error(`Operand "${tok}" must be t1 (use sum(${tok}) for aggregates)`)
+    // Fallback: bare token found in t2Sums → treat as detail aggregate.
+    if (ctx.t2Sums && ctx.t2Sums[tok] !== undefined) return String(ctx.t2Sums[tok] ?? 0)
+    // Fallback: bare token found in t1 → treat as raw T1 value.
+    if (ctx.t1 && ctx.t1[tok] !== undefined) return String(ctx.t1[tok] ?? 0)
+    throw new Error(`Unknown token: ${tok}`)
   })
   // Whitelist: digits, operators (arith + comparison + ternary), parens, decimal, whitespace
   if (!/^[\d\s+\-*/().?:%<>!=&|]+$/.test(replaced)) {
@@ -715,11 +719,71 @@ const footerTable = computed(() => {
     fieldMaps[dsName] = map
   }
 
-  // Normalize columns to objects: [{label, dataset?, field?}]
-  const normCols = (ft.columns as any[]).map(col => {
-    if (typeof col === 'object') return col
-    return { label: col }
+  // Normalize columns to objects: [{label, dataset?, field?, col_key?}]
+  // col_key: stable key for row.fields[]. Defaults to dataset.field or label.
+  const normCols = (ft.columns as any[]).map((col: any) => {
+    if (typeof col === 'object') {
+      return { ...col, col_key: col.col_key || col.field || col.label }
+    }
+    return { label: col, col_key: col }
   })
+
+  // Build eval context (shared across all cells) for expressions in row.fields[] values.
+  const summaryDs = reportStore.currentReport?.datasets?.find(
+    (d: any) => d.config_json?.display_role === 'summary' && d.nama_dataset === sumName
+  )
+  const cfg: T1SummaryConfig = (summaryDs?.config_json as T1SummaryConfig) || {}
+
+  const ctxT1: Record<string, number> = {}
+  if (t1) Object.keys(t1).forEach((k) => { ctxT1[k] = num(t1[k]) })
+  const ctxT1Sums: Record<string, number> = {}
+  if (cfg.bon_giro_fields?.length) {
+    cfg.bon_giro_fields.forEach((f) => { ctxT1Sums[f] = num(t1?.[f]) })
+    ctxT1Sums['TotalBonGiro'] = cfg.bon_giro_fields.reduce((s, f) => s + (ctxT1Sums[f] || 0), 0)
+  }
+  const ctxT2Sums: Record<string, number> = {}
+  ;(cfg.t2_sum_fields || []).forEach((f) => {
+    ctxT2Sums[f] = t2 ? t2.reduce((s: number, r: any) => s + num(r[f]), 0) : 0
+  })
+  const evalCtx = { t1: ctxT1, t1Sums: ctxT1Sums, t2Sums: ctxT2Sums }
+
+  // Resolve a single cell value for the given row × col.
+  // Priority: rowDef.fields[col.col_key] > rowDef.field > column-aware defaults.
+  //   - "sum" row: fields[col_key] is treated as expression (eval) or single field name (sum)
+  //   - "t1" row: fields[col_key] is t1/t1Summary key to read
+  //   - "computed" row: fields[col_key] is t1Summary computed key
+  const resolveCellValue = (rowDef: any, colDef: any): number => {
+    const ck = colDef.col_key
+    const explicit = rowDef.fields?.[ck]
+
+    if (explicit !== undefined) {
+      // "sum" row: explicit can be an expression (with sum(...) or +) or a field name
+      if (rowDef.data_source === 'sum') {
+        // Try evaluating as expression first
+        if (typeof explicit === 'string' && /[+\-*/()]|\b(?:sum|SaldoAwal)\b/.test(explicit)) {
+          try {
+            return evalT1Expression(explicit, {}, evalCtx)
+          } catch (e: any) {
+            console.warn(`[footerTable.resolveCell] sum expression failed for row="${rowDef.label}" col=${ck}:`, e?.message)
+            return 0
+          }
+        }
+        // Otherwise: sum the named field
+        return sumDataset(detName!, String(explicit))
+      }
+      // "t1" / "computed" row: explicit is a key to read from t1Summary (or raw t1)
+      if (rowDef.data_source === 't1' || rowDef.data_source === 'computed') {
+        if (t1Summary && t1Summary[explicit] !== undefined) {
+          return parseFloat(t1Summary[explicit] || 0)
+        }
+        if (t1 && t1[explicit] !== undefined) {
+          return parseFloat(t1[explicit] || 0)
+        }
+        return 0
+      }
+    }
+    return null as any // signal: no explicit, use legacy fallback
+  }
 
   const getCellValue = (datasetName: string, fieldName: string): number => {
     const dataset = reportStore.datasets[datasetName]
@@ -1169,7 +1233,7 @@ function formatCell(value: any, columnRef?: string | any): string {
   if (columnRef && typeof columnRef === 'object') {
     lookupKey = columnRef.nama_kolom
     const td = String(columnRef.tipe_data || columnRef.format_type || '').toLowerCase()
-    if (td && ['numeric', 'decimal', 'money', 'currency', 'angka'].includes(td)) {
+    if (td && ['numeric', 'decimal', 'money', 'currency', 'angka', 'number'].includes(td)) {
       colType = 'currency'
     } else if (td && ['percent', 'persen'].includes(td)) {
       colType = 'percent'
