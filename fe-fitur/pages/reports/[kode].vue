@@ -530,6 +530,9 @@ const evalT1Expression = (
     const src = operands[arg]
     if (src === 'sum:t2') return String(ctx.t2Sums[arg] ?? 0)
     if (src === 'sum:t1') return String(ctx.t1Sums[arg] ?? 0)
+    // Fallback: if operand not declared, treat as sum:t2 (detail dataset aggregate).
+    // Lets footer-table cell expressions use bare `sum(Debet)` without explicit operands.
+    if (!src && ctx.t2Sums[arg] !== undefined) return String(ctx.t2Sums[arg] ?? 0)
     throw new Error(`sum() operand "${arg}" must be sum:t1 or sum:t2`)
   })
   replaced = replaced.replace(/[A-Za-z_][A-Za-z0-9_]*/g, (tok) => {
@@ -710,7 +713,7 @@ const footerTable = computed(() => {
     columns: ft.columns,
     rows: ft.rows.map(row => {
       // Normalize row: support both string and object
-      const rowDef: { label: string; data_source?: string; dataset?: string; field?: string; fields?: Record<string, string> } =
+      const rowDef: { label: string; data_source?: string; dataset?: string; field?: string; fields?: Record<string, string>; cells?: Array<{ col?: number; expression?: string; field?: string }> } =
         typeof row === 'string' ? { label: row } : { ...row }
 
       // Determine which dataset this row reads from
@@ -719,6 +722,47 @@ const footerTable = computed(() => {
       const rowDataset = isSumRow ? (rowDef.dataset || detName) : sumName
       const isT1Row = rowDataset === sumName
       const rowData = isT1Row ? t1 : undefined
+
+      // Handle "cells" data_source — per-cell expression override.
+      // Format: {label, data_source:"cells", cells: [{col:0, expression:"sum(Debet) + SaldoAwal"}, ...]}
+      // Each cell expression is evaluated with evalT1Expression ctx (t1, t1Sums, t2Sums).
+      // Cells without col match (or empty cells) fall through to row default.
+      if (rowDef.data_source === 'cells' && t1Summary) {
+        const sumName = summaryDatasetName.value
+        const summaryDs = reportStore.currentReport?.datasets?.find(
+          (d: any) => d.config_json?.display_role === 'summary' && d.nama_dataset === sumName
+        )
+        const cfg: T1SummaryConfig = (summaryDs?.config_json as T1SummaryConfig) || {}
+        const ctxT1: Record<string, number> = {}
+        if (t1) Object.keys(t1).forEach((k) => { ctxT1[k] = num(t1[k]) })
+        const ctxT1Sums: Record<string, number> = {}
+        if (cfg.bon_giro_fields?.length) {
+          cfg.bon_giro_fields.forEach((f) => { ctxT1Sums[f] = num(t1?.[f]) })
+          ctxT1Sums['TotalBonGiro'] = cfg.bon_giro_fields.reduce((s, f) => s + (ctxT1Sums[f] || 0), 0)
+        }
+        const ctxT2Sums: Record<string, number> = {}
+        ;(cfg.t2_sum_fields || []).forEach((f) => {
+          ctxT2Sums[f] = t2 ? t2.reduce((s: number, r: any) => s + num(r[f]), 0) : 0
+        })
+
+        return {
+          label: rowDef.label,
+          cells: normCols.map((colDef: any, colIdx: number) => {
+            const cellDef = rowDef.cells?.find((c: any) => (c.col === undefined ? colIdx : c.col) === colIdx)
+            if (!cellDef) return 0
+            if (cellDef.field) return parseFloat(t1Summary[cellDef.field] || 0)
+            if (cellDef.expression) {
+              try {
+                return evalT1Expression(cellDef.expression, {}, { t1: ctxT1, t1Sums: ctxT1Sums, t2Sums: ctxT2Sums })
+              } catch (e: any) {
+                console.warn(`[footerTable.cells] row="${rowDef.label}" col=${colIdx} failed:`, e?.message)
+                return 0
+              }
+            }
+            return 0
+          })
+        }
+      }
 
       // Handle "computed" data_source — reads from t1SummaryData computed properties.
       // For each column, resolve D/K suffix based on column field (Debet→D, kredit→K).
