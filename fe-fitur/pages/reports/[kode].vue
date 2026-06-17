@@ -915,7 +915,16 @@ const chgbPanel = computed(() => {
       if (row.field) {
         value = parseFloat(t1?.[row.field] || 0)
       } else if (row.expression) {
-        value = evalT1Expression(row.expression, {}, { t1: ctxT1, t1Sums: ctxT1Sums, t2Sums: ctxT2Sums })
+        // Build auto-operands: bare tokens → t1 (so SaldoAwal, SaldoGiro, etc. resolve),
+        // sum(X) tokens → sum:t2 (so sum(Debet) resolves).
+        const autoOperands: Record<string, 't1' | 'sum:t2'> = {}
+        for (const tok of row.expression.match(/[A-Za-z_][A-Za-z0-9_]*/g) || []) {
+          if (tok === 'sum') continue
+          if (autoOperands[tok]) continue
+          if (ctxT1[tok] !== undefined) autoOperands[tok] = 't1'
+          else if (ctxT2Sums[tok] !== undefined) autoOperands[tok] = 'sum:t2'
+        }
+        value = evalT1Expression(row.expression, autoOperands, { t1: ctxT1, t1Sums: ctxT1Sums, t2Sums: ctxT2Sums })
       }
     } catch (e: any) {
       console.warn(`[chgbPanel] row="${row.label}" failed:`, e?.message)
