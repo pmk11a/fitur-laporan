@@ -435,6 +435,11 @@ class ReportService
                 if (!($dataset['visible'] ?? true)) continue;
                 try {
                     $data = $this->executeQuery($dataset['nama_dataset'], $dataset['id_query'], $filters);
+
+                    // Compute running balance for datasets that return SaldoAkhir per-row
+                    // (mimics .fr3 Pascal script: SaldoAkhir := SaldoAkhir + <saldoakhir>)
+                    $data = $this->computeRunningBalance($data, $dataset['nama_dataset']);
+
                     $datasets[$dataset['nama_dataset']] = $data;
                 } catch (\Exception $e) {
                     $errors[] = "Dataset {$dataset['nama_dataset']}: " . $e->getMessage();
@@ -603,6 +608,22 @@ class ReportService
             }
         }
 
+        // Handle @UserID - same source as @IDUser but case may differ from the
+        // filter key (`userId`). Match case-insensitively so queries like
+        // `EXEC sp_xxx ..., @UserID, 'T'` resolve correctly.
+        if (preg_match('/@UserID\b/i', $sql)) {
+            $resolved = $userId;
+            if (!$resolved) {
+                try {
+                    $resolved = auth()->user()->USERID ?? null;
+                } catch (\Exception $e) {
+                    $resolved = null;
+                }
+            }
+            $replacement = $resolved ? "'" . addslashes((string) $resolved) . "'" : "''";
+            $sql = preg_replace('/@UserID\b/i', $replacement, $sql);
+        }
+
         // Execute query directly with substituted values
         try {
             Log::info('[ReportService::executeQuery] dataset=' . $namaDataset . ' | filters=' . json_encode($filters) . ' | sql=' . $sql);
@@ -647,6 +668,35 @@ class ReportService
             }
             return $converted;
         }, $results);
+    }
+
+    /**
+     * Compute running balance from a per-row saldo field.
+     *
+     * SPs like sp_ReportBukuTambahan return SaldoAkhir as the net balance
+     * of each row (Debet - Kredit), not as a running total. The .fr3
+     * Pascal script computes it manually:
+     *   SaldoAkhir := SaldoAkhir + <frxDBData."saldoakhir">
+     *
+     * This method mirrors that logic: it accumulates SaldoAkhir
+     * row-by-row and stores the running balance back into the same key
+     * so GroupedTable can render it directly.
+     */
+    private function computeRunningBalance(array $data, string $datasetName): array
+    {
+        // Only apply to datasets that have a saldo-like column
+        if (empty($data) || !isset($data[0]['SaldoAkhir'])) {
+            return $data;
+        }
+
+        $running = 0.0;
+        foreach ($data as &$row) {
+            $val = (float)($row['SaldoAkhir'] ?? 0);
+            $running += $val;
+            $row['SaldoAkhir'] = $running;
+        }
+
+        return $data;
     }
 
     private function buildGroupedData(array $data, array $groupConfig, array $columnConfig, ?string $datasetName = null): array
