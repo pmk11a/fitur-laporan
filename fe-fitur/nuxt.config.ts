@@ -14,6 +14,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   app: {
+    baseURL: '/Dapen/Fe-Dapen/', // Wajib diakhiri dengan garis miring
     head: {
       title: 'Fluffy Bee - Dynamic Report Engine',
       meta: [
@@ -37,5 +38,9 @@ export default defineNuxtConfig({
     experimental: {
       asyncContext: true
     }
+  },
+  devServer: {
+    host: '0.0.0.0',
+    port: 3000
   }
 })
