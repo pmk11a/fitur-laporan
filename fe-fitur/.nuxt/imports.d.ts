@@ -42,4 +42,3 @@ export { useMenuStore } from '../stores/menu';
 export { useReportStore, FooterBandsConfig, ReportConfig, FilterConfig, DatasetConfig, ColumnConfig, GroupConfig, GroupedData, MenuItem } from '../stores/reports';
 export { useUserPreferencesStore } from '../stores/userPreferences';
 export { defineStore, acceptHMRUpdate, usePinia, storeToRefs } from '../node_modules/@pinia/nuxt/dist/runtime/composables';
-export { useNuxtDevTools } from '../node_modules/@nuxt/devtools/dist/runtime/use-nuxt-devtools';
