@@ -278,7 +278,7 @@
                   </thead>
                   <tbody class="divide-y divide-secondary-100">
                     <tr
-                      v-for="(row, rowIdx) in (reportStore.datasets[dataset.nama_dataset] || []).slice(0, 100)"
+                      v-for="(row, rowIdx) in (showAllRecords ? (reportStore.datasets[dataset.nama_dataset] || []) : (reportStore.datasets[dataset.nama_dataset] || []).slice(0, 100))"
                       :key="rowIdx"
                       class="hover:bg-secondary-50"
                     >
@@ -335,7 +335,7 @@
                   </thead>
                   <tbody class="divide-y divide-secondary-100">
                     <tr
-                      v-for="(row, rowIdx) in (reportStore.datasets[dataset.nama_dataset] || []).slice(0, 100)"
+                      v-for="(row, rowIdx) in (showAllRecords ? (reportStore.datasets[dataset.nama_dataset] || []) : (reportStore.datasets[dataset.nama_dataset] || []).slice(0, 100))"
                       :key="rowIdx"
                       class="hover:bg-secondary-50"
                     >
@@ -352,9 +352,9 @@
 
                 <!-- Show all records link for this dataset -->
                 <div v-if="getDatasetRecordCount(dataset.nama_dataset) > 100 && !hasGrouping" class="px-6 py-4 text-center text-sm text-secondary-500">
-                  Showing first 100 of {{ getDatasetRecordCount(dataset.nama_dataset) }} records.
-                  <button @click="showAllRecords = true" class="text-primary-500 hover:underline">
-                    Show all
+                  {{ showAllRecords ? '' : 'Showing first 100 of ' }}{{ getDatasetRecordCount(dataset.nama_dataset) }} records.
+                  <button @click="showAllRecords = !showAllRecords" class="text-primary-500 hover:underline">
+                    {{ showAllRecords ? 'Show less' : 'Show all' }}
                   </button>
                 </div>
 
