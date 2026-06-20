@@ -301,7 +301,7 @@ class ReportService
     {
         try {
             $queries = DB::connection('sqlsrv')->select(
-                "SELECT * FROM dbquerylaporan WHERE id_laporan = ? AND visible = 1 ORDER BY urutan",
+                "SELECT * FROM dbquerylaporan WHERE id_laporan = ? ORDER BY urutan",
                 [$idLaporan]
             );
 
@@ -432,8 +432,14 @@ class ReportService
 
             // Execute each query in dbquerylaporan
             foreach ($config['datasets'] ?? [] as $dataset) {
+                if (!($dataset['visible'] ?? true)) continue;
                 try {
                     $data = $this->executeQuery($dataset['nama_dataset'], $dataset['id_query'], $filters);
+
+                    // Compute running balance for datasets that return SaldoAkhir per-row
+                    // (mimics .fr3 Pascal script: SaldoAkhir := SaldoAkhir + <saldoakhir>)
+                    $data = $this->computeRunningBalance($data, $dataset['nama_dataset']);
+
                     $datasets[$dataset['nama_dataset']] = $data;
                 } catch (\Exception $e) {
                     $errors[] = "Dataset {$dataset['nama_dataset']}: " . $e->getMessage();
@@ -466,8 +472,10 @@ class ReportService
                     }
                 }
                 // For backward compatibility, also set first dataset as root
-                if (isset($config['datasets'][0]['nama_dataset'])) {
-                    $firstDataset = $config['datasets'][0]['nama_dataset'];
+                $firstVisible = collect($config['datasets'] ?? [])
+                    ->first(fn($d) => ($d['visible'] ?? true));
+                if ($firstVisible) {
+                    $firstDataset = $firstVisible['nama_dataset'];
                     $groupedData['_main'] = $groupedData[$firstDataset] ?? null;
                 }
             }
@@ -545,6 +553,22 @@ class ReportService
 
             $placeholder = '@' . $key;
             if (!str_contains($sql, $placeholder)) {
+                // Fallback: case-insensitive match for SQL Server params.
+                // PHP `str_contains`/`str_replace` are case-sensitive but SQL
+                // Server treats `@PerkiraanA` and `@perkinramaA` the same.
+                $caseInsensitivePlaceholder = '@' . $key;
+                if (stripos($sql, $caseInsensitivePlaceholder) !== false) {
+                    $escapedValue = (is_array($value) && count($value) > 0)
+                        ? implode(',', array_map(fn($v) => "'" . addslashes((string) $v) . "'", $value))
+                        : (($value === '' || $value === null) ? 'NULL'
+                            : "'" . addslashes((string) $value) . "'");
+                    $sql = preg_replace(
+                        '/\b' . preg_quote($caseInsensitivePlaceholder, '/') . '\b/i',
+                        $escapedValue,
+                        $sql
+                    );
+                    continue;
+                }
                 // Filter supplied by client but query has no matching @placeholder
                 // → it would be silently ignored. Log it so misconfigurations are visible.
                 if ($key !== 'userId' && $value !== '' && $value !== null) {
@@ -600,6 +624,22 @@ class ReportService
             }
         }
 
+        // Handle @UserID - same source as @IDUser but case may differ from the
+        // filter key (`userId`). Match case-insensitively so queries like
+        // `EXEC sp_xxx ..., @UserID, 'T'` resolve correctly.
+        if (preg_match('/@UserID\b/i', $sql)) {
+            $resolved = $userId;
+            if (!$resolved) {
+                try {
+                    $resolved = auth()->user()->USERID ?? null;
+                } catch (\Exception $e) {
+                    $resolved = null;
+                }
+            }
+            $replacement = $resolved ? "'" . addslashes((string) $resolved) . "'" : "''";
+            $sql = preg_replace('/@UserID\b/i', $replacement, $sql);
+        }
+
         // Execute query directly with substituted values
         try {
             Log::info('[ReportService::executeQuery] dataset=' . $namaDataset . ' | filters=' . json_encode($filters) . ' | sql=' . $sql);
@@ -646,6 +686,35 @@ class ReportService
         }, $results);
     }
 
+    /**
+     * Compute running balance from a per-row saldo field.
+     *
+     * SPs like sp_ReportBukuTambahan return SaldoAkhir as the net balance
+     * of each row (Debet - Kredit), not as a running total. The .fr3
+     * Pascal script computes it manually:
+     *   SaldoAkhir := SaldoAkhir + <frxDBData."saldoakhir">
+     *
+     * This method mirrors that logic: it accumulates SaldoAkhir
+     * row-by-row and stores the running balance back into the same key
+     * so GroupedTable can render it directly.
+     */
+    private function computeRunningBalance(array $data, string $datasetName): array
+    {
+        // Only apply to datasets that have a saldo-like column
+        if (empty($data) || !isset($data[0]['SaldoAkhir'])) {
+            return $data;
+        }
+
+        $running = 0.0;
+        foreach ($data as &$row) {
+            $val = (float)($row['SaldoAkhir'] ?? 0);
+            $running += $val;
+            $row['SaldoAkhir'] = $running;
+        }
+
+        return $data;
+    }
+
     private function buildGroupedData(array $data, array $groupConfig, array $columnConfig, ?string $datasetName = null): array
     {
         // Build label mapping
@@ -657,7 +726,20 @@ class ReportService
             $levelFields[$group['group_level']] = $group['group_field'];
         }
 
-        // Sort data by group fields
+        // Defensive: if level 1 is not in dbgrouplaporan but data contains L1 fields,
+        // infer it from the lowest group level present in data (e.g. grupAP1)
+        if (!isset($levelFields[1]) && !empty($data) && $groupConfig !== null) {
+            foreach ($groupConfig as $g) {
+                if (isset($g['config_json']) && is_array($g['config_json'])) {
+                    $cn = $g['config_json']['field_name'] ?? null;
+                    if ($cn && isset($data[0][$cn]) && $data[0][$cn] !== '') {
+                        $levelFields[1] = $cn;
+                        break;
+                    }
+                }
+            }
+        }
+
         usort($data, function ($a, $b) use ($levelFields) {
             foreach ($levelFields as $level => $field) {
                 $cmp = strcmp($a[$field] ?? '', $b[$field] ?? '');

@@ -247,19 +247,23 @@ const { formatColumn } = useNumberFormatter(props.kodeMenu)
 function formatCell(value: any, formatType: string): string {
   if (value === null || value === undefined || value === '') return '-'
 
-  switch (formatType) {
-    case 'currency':
-      return formatColumn('__currency_default', value, 'currency')
-    case 'numeric':
-      return formatColumn('__numeric_default', value, 'numeric')
-    case 'date':
-      if (/^\d{4}-\d{2}-\d{2}/.test(String(value))) {
-        return new Date(value).toLocaleDateString('id-ID')
-      }
-      return String(value)
-    default:
-      return String(value)
+  if (typeof value === 'string') {
+    // Handle ".000000" format (empty numeric from SP)
+    if (value === '.000000' || value === '.00' || value === '.0') return '-'
   }
+
+  const ft = String(formatType || '').toLowerCase()
+  // Currency-like types (number/angka/decimal/money all map to currency formatter)
+  if (['numeric', 'decimal', 'money', 'currency', 'angka', 'number'].includes(ft)) {
+    return formatColumn('__currency_default', value, 'currency')
+  }
+  if (ft === 'date') {
+    if (/^\d{4}-\d{2}-\d{2}/.test(String(value))) {
+      return new Date(value).toLocaleDateString('id-ID')
+    }
+    return String(value)
+  }
+  return String(value)
 }
 
 function hasSubtotal(subtotal: any): boolean {

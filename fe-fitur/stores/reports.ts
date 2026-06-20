@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { useAuthStore } from './auth'
 
 /**
  * Footer Bands Configuration (from dbmasterlaporan.footer_bands)
@@ -60,8 +61,15 @@ export interface DatasetConfig {
   config_json?: {
     display_role?: 'summary' | 'detail'
     summary_layout?: 'grid_2col' | 'grid_1col'
+    detail_dataset?: string
+    t2_sum_fields?: string[]
+    bon_giro_fields?: string[]
     summary_fields?: string[]
     right_fields?: string[]
+    computed?: Record<string, {
+      expression: string
+      operands: Record<string, 't1' | 'sum:t1' | 'sum:t2'>
+    }>
   }
 }
 
@@ -324,10 +332,40 @@ export const useReportStore = defineStore('report', {
         })
 
         if (response.success) {
+          // DEBUG: inspect raw preview response
+          // Enable from browser console: __toggleDebugT1(true)
+          if (typeof window !== 'undefined' && (window as any).__DEBUG_T1_PAYLOAD__) {
+            console.log('[DEBUG] /preview raw response:', response)
+            console.log('[DEBUG] datasets keys:', Object.keys(response.datasets || {}))
+            const t1 = (response.datasets || {})['T1'] || []
+            console.log('[DEBUG] T1 row count:', t1.length)
+            if (t1.length > 0) {
+              console.log('[DEBUG] T1[0] keys:', Object.keys(t1[0]))
+              console.log('[DEBUG] T1[0] full row:', t1[0])
+            }
+            const t2 = (response.datasets || {})['T2'] || []
+            console.log('[DEBUG] T2 row count:', t2.length)
+            if (t2.length > 0) {
+              console.log('[DEBUG] T2[0] keys:', Object.keys(t2[0]))
+              console.log('[DEBUG] T2[0] full row:', t2[0])
+            }
+            // Also dump config_json of summary dataset
+            const summaryDs = (response.config?.datasets || []).find((d: any) => d.config_json?.display_role === 'summary')
+            console.log('[DEBUG] summary dataset config_json:', summaryDs?.config_json)
+          }
           this.datasets = response.datasets || {}
           this.groupedData = response.groupedData
           this.grandTotal = response.grandTotal || {}
           this.reportData = Object.values(response.datasets)[0] || []
+          // Update config (datasets, columns) from preview response to stay in sync
+          if (response.config) {
+            // Strip out hidden datasets so FE never sees them
+            const cleanConfig = {
+              ...response.config,
+              datasets: (response.config.datasets || []).filter((d: any) => d.visible !== false)
+            }
+            this.currentReport = { ...this.currentReport, ...cleanConfig }
+          }
           // Update columns from config (for dynamic columns like jumlah2)
           this.columns = response.config?.columns || {}
           // Store groupingConfig from database (no hardcoded patterns)

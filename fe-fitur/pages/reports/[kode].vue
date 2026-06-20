@@ -278,7 +278,7 @@
                   </thead>
                   <tbody class="divide-y divide-secondary-100">
                     <tr
-                      v-for="(row, rowIdx) in (reportStore.datasets[dataset.nama_dataset] || []).slice(0, 100)"
+                      v-for="(row, rowIdx) in (showAllRecords ? (reportStore.datasets[dataset.nama_dataset] || []) : (reportStore.datasets[dataset.nama_dataset] || []).slice(0, 100))"
                       :key="rowIdx"
                       class="hover:bg-secondary-50"
                     >
@@ -335,7 +335,7 @@
                   </thead>
                   <tbody class="divide-y divide-secondary-100">
                     <tr
-                      v-for="(row, rowIdx) in (reportStore.datasets[dataset.nama_dataset] || []).slice(0, 100)"
+                      v-for="(row, rowIdx) in (showAllRecords ? (reportStore.datasets[dataset.nama_dataset] || []) : (reportStore.datasets[dataset.nama_dataset] || []).slice(0, 100))"
                       :key="rowIdx"
                       class="hover:bg-secondary-50"
                     >
@@ -352,9 +352,9 @@
 
                 <!-- Show all records link for this dataset -->
                 <div v-if="getDatasetRecordCount(dataset.nama_dataset) > 100 && !hasGrouping" class="px-6 py-4 text-center text-sm text-secondary-500">
-                  Showing first 100 of {{ getDatasetRecordCount(dataset.nama_dataset) }} records.
-                  <button @click="showAllRecords = true" class="text-primary-500 hover:underline">
-                    Show all
+                  {{ showAllRecords ? '' : 'Showing first 100 of ' }}{{ getDatasetRecordCount(dataset.nama_dataset) }} records.
+                  <button @click="showAllRecords = !showAllRecords" class="text-primary-500 hover:underline">
+                    {{ showAllRecords ? 'Show less' : 'Show all' }}
                   </button>
                 </div>
 
@@ -364,7 +364,7 @@
 
           <!-- T1 Summary Section - Dynamic Column Layout from config_json -->
           <div v-if="t1SummaryData" class="mt-4 border-t-2 border-secondary-300 pt-4 bg-secondary-50">
-            <div :class="`grid grid-cols-${summaryColumnCount} gap-6`">
+            <div v-if="showT1SummaryGrid" :class="`grid grid-cols-${summaryColumnCount} gap-6`">
               <!-- Left Column: Cash Details -->
               <div>
                 <table class="w-full text-sm">
@@ -390,17 +390,40 @@
               </div>
             </div>
 
+            <!-- CH/GB panel + Footer Table row (CH/GB on left, footer table on right when both exist) -->
+            <div
+              v-if="chgbPanel || footerTable"
+              :class="['mt-4 pt-3 border-t border-secondary-300', (chgbPanel && footerTable) ? 'flex gap-6' : '']"
+            >
+            <!-- CH/GB panel (left side of .fr3 Footer1) — independent section, config-driven rows -->
+            <div
+              v-if="chgbPanel"
+              :class="(footerTable) ? 'w-1/3' : 'w-full'"
+            >
+              <table class="w-full text-sm">
+                <tbody>
+                  <tr v-for="row in chgbPanel" :key="row.label">
+                    <td class="py-0.5 pr-4 text-secondary-600 w-1/2">{{ row.label }}</td>
+                    <td class="py-0.5 text-secondary-900 font-medium text-right">{{ formatCell(row.value, { format_type: 'currency' }) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
             <!-- Dynamic Footer Table from footer_bands config -->
-            <div v-if="footerTable" class="mt-4 pt-3 border-t border-secondary-300">
+            <div
+              v-if="footerTable"
+              :class="(chgbPanel) ? 'flex-1' : 'w-full'"
+            >
               <table class="w-full text-sm">
                 <thead>
                   <tr>
                     <th class="text-left py-1 pr-4 text-secondary-600 font-medium w-1/3"></th>
                     <th
-                      v-for="colLabel in footerTable.columns"
-                      :key="colLabel"
+                      v-for="col in footerTable.columns"
+                      :key="typeof col === 'object' ? col.label : col"
                       class="text-right py-1 px-4 text-secondary-600 font-medium"
-                    >{{ colLabel }}</th>
+                    >{{ typeof col === 'object' ? col.label : col }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -414,6 +437,7 @@
                   </tr>
                 </tbody>
               </table>
+            </div>
             </div>
 
             <!-- Dynamic Signature Section from footer_bands config (full-width) -->
@@ -499,62 +523,111 @@ const columnLabels = computed(() => {
 
 // T1 Summary Data (for multi-dataset reports like Kas Harian)
 // Include calculated fields from T2 transactions (mimics .fr3 FastReport script)
+// All field/formula selection is config-driven via summary dataset's config_json:
+//   - t2_sum_fields: string[]   columns on detail dataset to SUM (e.g. ["Debet","kredit","debet2","kredit2"])
+//   - bon_giro_fields: string[] T1 columns to SUM into TotalBonGiro
+//   - computed: { [target]: { expression, operands } }
+//       expression: arithmetic string with tokens, e.g. "sum(Debet) + SaldoAwal - sum(kredit) - TotalBonGiro"
+//       operands: map of token -> source (e.g. { Debet: "sum:t2", SaldoAwal: "t1" })
+type T1ComputedRule = {
+  expression: string
+  operands: Record<string, 't1' | 'sum:t1' | 'sum:t2'>
+}
+type T1SummaryConfig = {
+  detail_dataset?: string
+  t2_sum_fields?: string[]
+  bon_giro_fields?: string[]
+  computed?: Record<string, T1ComputedRule>
+}
+
+const num = (v: any) => parseFloat(v || 0) || 0
+
+const evalT1Expression = (
+  expression: string,
+  operands: Record<string, 't1' | 'sum:t1' | 'sum:t2'>,
+  ctx: { t1: Record<string, number>; t1Sums: Record<string, number>; t2Sums: Record<string, number> }
+): number => {
+  // Replace `name(name)` function calls first (e.g. `sum(Debet)`)
+  // Then replace remaining bare tokens (e.g. `SaldoAwal`)
+  let replaced = expression.replace(/([A-Za-z_][A-Za-z0-9_]*)\(([A-Za-z_][A-Za-z0-9_]*)\)/g, (_whole, fn, arg) => {
+    if (fn !== 'sum') throw new Error(`Unknown function: ${fn}`)
+    const src = operands[arg]
+    if (src === 'sum:t2') return String(ctx.t2Sums[arg] ?? 0)
+    if (src === 'sum:t1') return String(ctx.t1Sums[arg] ?? 0)
+    // Fallback: if operand not declared, treat as sum:t2 (detail dataset aggregate).
+    // Lets footer-table cell expressions use bare `sum(Debet)` without explicit operands.
+    if (!src && ctx.t2Sums[arg] !== undefined) return String(ctx.t2Sums[arg] ?? 0)
+    throw new Error(`sum() operand "${arg}" must be sum:t1 or sum:t2`)
+  })
+  replaced = replaced.replace(/[A-Za-z_][A-Za-z0-9_]*/g, (tok) => {
+    const src = operands[tok]
+    if (src === 't1') return String(ctx.t1[tok] ?? 0)
+    if (src) throw new Error(`Operand "${tok}" must be t1 (use sum(${tok}) for aggregates)`)
+    // Fallback: bare token found in t2Sums → treat as detail aggregate.
+    if (ctx.t2Sums && ctx.t2Sums[tok] !== undefined) return String(ctx.t2Sums[tok] ?? 0)
+    // Fallback: bare token found in t1 → treat as raw T1 value.
+    if (ctx.t1 && ctx.t1[tok] !== undefined) return String(ctx.t1[tok] ?? 0)
+    throw new Error(`Unknown token: ${tok}`)
+  })
+  // Whitelist: digits, operators (arith + comparison + ternary), parens, decimal, whitespace
+  if (!/^[\d\s+\-*/().?:%<>!=&|]+$/.test(replaced)) {
+    throw new Error(`Expression contains invalid characters: ${replaced}`)
+  }
+  // eslint-disable-next-line no-new-func
+  const fn = new Function(`"use strict"; return (${replaced});`)
+  const result = fn()
+  return typeof result === 'number' && isFinite(result) ? result : 0
+}
+
 const t1SummaryData = computed(() => {
   const sumName = summaryDatasetName.value
-  const detName = detailDatasets.value[0]?.nama_dataset
-
   if (!sumName) return null
 
+  const summaryDs = reportStore.currentReport?.datasets?.find(
+    (d: any) => d.config_json?.display_role === 'summary' && d.nama_dataset === sumName
+  )
+  const cfg: T1SummaryConfig = (summaryDs?.config_json as T1SummaryConfig) || {}
+
+  const detName = cfg.detail_dataset || detailDatasets.value[0]?.nama_dataset
   const t1 = reportStore.datasets[sumName]
   const t2 = detName ? reportStore.datasets[detName] : null
   if (!t1 || t1.length === 0) return null
 
-  const data = { ...t1[0] }
+  const data: Record<string, any> = { ...t1[0] }
 
-  if (t2 && t2.length > 0) {
-    // Sum all transaction columns
-    const sumDebet = t2.reduce((sum: number, row: any) => sum + parseFloat(row.Debet || 0), 0)
-    const sumKredit = t2.reduce((sum: number, row: any) => sum + parseFloat(row.kredit || 0), 0)
-    const sumDebet2 = t2.reduce((sum: number, row: any) => sum + parseFloat(row.debet2 || 0), 0)
-    const sumKredit2 = t2.reduce((sum: number, row: any) => sum + parseFloat(row.kredit2 || 0), 0)
+  // T2 aggregates (config-driven)
+  const t2SumFields = cfg.t2_sum_fields || []
+  const t2Sums: Record<string, number> = {}
+  t2SumFields.forEach((f) => {
+    t2Sums[f] = t2 ? t2.reduce((s: number, r: any) => s + num(r[f]), 0) : 0
+  })
 
-    // Base values from T1 SP
-    const saldoAwal = parseFloat(data.SaldoAwal || 0)
-    const saldoAwalD = parseFloat(data.SaldoAwalD || 0)
-    const saldoAwalK = parseFloat(data.SaldoAwalK || 0)
-
-    // SaldoAkhirD = SaldoAwal + SUM(debet) - SUM(kredit) - SUM(kredit2)
-    data.SaldoAkhirD = saldoAwal + sumDebet + sumDebet2 - sumKredit - sumKredit2
-
-    // SaldoAkhirK = SaldoAwal + SUM(debet2) - SUM(kredit2)
-    data.SaldoAkhirK = saldoAwal + sumDebet2 - sumKredit2
-
-    // TotalD = SUM(debet) + SaldoAwalD + SaldoAkhirD
-    data.TotalD = sumDebet + saldoAwalD + data.SaldoAkhirD
-
-    // TotalK = SUM(kredit) + SaldoAwalK + SaldoAkhirK
-    data.TotalK = sumKredit + saldoAwalK + data.SaldoAkhirK
-
-    // Saldo = if SaldoAkhirD > 0 then SaldoAkhirD else SaldoAkhirK
-    data.Saldo = data.SaldoAkhirD > 0 ? data.SaldoAkhirD : data.SaldoAkhirK
-
-    // Tunai = (SUM(debet) + SUM(debet2) + SaldoAwal - SUM(kredit) - SUM(kredit2)) - TotalBonGiro
-    const saldoGiro = parseFloat(data.SaldoGiro || 0)
-    const saldoBon = parseFloat(data.SaldoBon || 0)
-    const saldoBonD = parseFloat(data.SaldoBonD || 0)
-    const saldoBonE = parseFloat(data.SaldoBonE || 0)
-    const saldoBonA = parseFloat(data.SaldoBonA || 0)
-    const saldoBonDH = parseFloat(data.SaldoBonDH || 0)
-    const saldoGiroTolakan = parseFloat(data.SaldoGiroTolakan || 0)
-    const totalBonGiro = saldoGiro + saldoBon + saldoBonD + saldoBonE + saldoBonA + saldoBonDH + saldoGiroTolakan
-    data.Tunai = (sumDebet + sumDebet2 + saldoAwal - sumKredit - sumKredit2) - totalBonGiro
-
-    // Expose raw T2 sums for footer_table Jumlah row
-    data.sumDebet = sumDebet
-    data.sumKredit = sumKredit
-    data.sumDebet2 = sumDebet2
-    data.sumKredit2 = sumKredit2
+  // T1 aggregates (config-driven, e.g. TotalBonGiro)
+  const t1Sums: Record<string, number> = {}
+  if (cfg.bon_giro_fields?.length) {
+    cfg.bon_giro_fields.forEach((f) => { t1Sums[f] = num(data[f]) })
+    // Expose TotalBonGiro as the sum of all bon_giro_fields for use in computed expressions
+    t1Sums['TotalBonGiro'] = cfg.bon_giro_fields.reduce((s, f) => s + (t1Sums[f] || 0), 0)
   }
+
+  // Built-in helpers (always available)
+  const t1Nums: Record<string, number> = {}
+  Object.keys(data).forEach((k) => { t1Nums[k] = num(data[k]) })
+
+  // Apply computed rules (config-driven)
+  if (cfg.computed) {
+    for (const [target, rule] of Object.entries(cfg.computed)) {
+      try {
+        data[target] = evalT1Expression(rule.expression, rule.operands, { t1: t1Nums, t1Sums, t2Sums })
+      } catch (e: any) {
+        console.warn(`[t1SummaryData] computed.${target} failed:`, e?.message)
+        data[target] = 0
+      }
+    }
+  }
+
+  // Expose raw T2 sums for footer_table Jumlah row
+  t2SumFields.forEach((f) => { data[`sum${f}`] = t2Sums[f] })
 
   return data
 })
@@ -623,24 +696,32 @@ const t1RightFields = computed(() => {
   return summaryCols.map((c: any) => ({ key: c.nama_kolom, label: c.label_tampil || c.nama_kolom, column: c }))
 })
 
-// Footer Table from footer_bands config (rows × columns matrix)
-// Reads from t1SummaryData (which has computed SP values) for Saldo rows
-// and T2 transaction sums for Jumlah row
+// Footer Table from footer_bands config (dynamic rows × columns)
+// Supports 2 row formats:
+//   Legacy (label display):   rows: ["Jumlah", "Saldo Awal"]
+//   New (nama_kolom):         rows: ["SaldoAwalD", "TotalD"]
+//   New (sum config):         rows: [{label:"Jumlah", data_source:"sum", dataset:"T2", field:"Debet"}]
+// Also supports 2 column formats:
+//   Legacy (label display):   columns: ["Penerimaan", "Pengeluaran"]
+//   New (named object):       columns: [{label: "Penerimaan", dataset: "T2", field: "Debet"}]
 const footerTable = computed(() => {
   const ft = reportStore.currentReport?.footer_bands?.bands?.summary?.footer_table
   if (!ft?.rows?.length || !ft?.columns?.length) return null
 
   const detName = detailDatasets.value[0]?.nama_dataset
+  // Use t1SummaryData computed for footer table — it has the D/K calculated fields
+  const t1Summary = t1SummaryData.value
+  const t1 = sumName ? reportStore.datasets[sumName]?.[0] : null
   const t2 = detName ? (reportStore.datasets[detName] || []) : []
   const summary = t1SummaryData.value
 
-  // Map display label → data key (D-side default)
   const rowKeyMapD: Record<string, string> = {
     'Jumlah': 'sumDebet',
     'Saldo Awal': 'SaldoAwalD',
     'Saldo Akhir': 'SaldoAkhirD',
     'Kontrol': 'TotalD'
   }
+
   // K-side variant (for columns with "(K)" suffix or "Pengeluaran")
   const rowKeyMapK: Record<string, string> = {
     'Jumlah': 'sumKredit',
@@ -649,32 +730,285 @@ const footerTable = computed(() => {
     'Kontrol': 'TotalK'
   }
 
-  // Map display label → T2 column nama_kolom (for Jumlah row)
-  const t2Cols = detName ? (reportStore.currentReport?.columns?.[detName] || []) : []
-  const colFieldMap: Record<string, string> = {}
-  for (const c of t2Cols) {
-    if (c.label_tampil) colFieldMap[c.label_tampil] = c.nama_kolom
+  // Normalize columns to objects: [{label, dataset?, field?, col_key?}]
+  // col_key: stable key for row.fields[]. Defaults to dataset.field or label.
+  const normCols = (ft.columns as any[]).map((col: any) => {
+    if (typeof col === 'object') {
+      return { ...col, col_key: col.col_key || col.field || col.label }
+    }
+    return { label: col, col_key: col }
+  })
+
+  // Build eval context (shared across all cells) for expressions in row.fields[] values.
+  const summaryDs = reportStore.currentReport?.datasets?.find(
+    (d: any) => d.config_json?.display_role === 'summary' && d.nama_dataset === sumName
+  )
+  const cfg: T1SummaryConfig = (summaryDs?.config_json as T1SummaryConfig) || {}
+
+  const ctxT1: Record<string, number> = {}
+  if (t1) Object.keys(t1).forEach((k) => { ctxT1[k] = num(t1[k]) })
+  const ctxT1Sums: Record<string, number> = {}
+  if (cfg.bon_giro_fields?.length) {
+    cfg.bon_giro_fields.forEach((f) => { ctxT1Sums[f] = num(t1?.[f]) })
+    ctxT1Sums['TotalBonGiro'] = cfg.bon_giro_fields.reduce((s, f) => s + (ctxT1Sums[f] || 0), 0)
+  }
+  const ctxT2Sums: Record<string, number> = {}
+  ;(cfg.t2_sum_fields || []).forEach((f) => {
+    ctxT2Sums[f] = t2 ? t2.reduce((s: number, r: any) => s + num(r[f]), 0) : 0
+  })
+  const evalCtx = { t1: ctxT1, t1Sums: ctxT1Sums, t2Sums: ctxT2Sums }
+
+  // Resolve a single cell value for the given row × col.
+  // Priority: rowDef.fields[col.col_key] > rowDef.field > column-aware defaults.
+  //   - "sum" row: fields[col_key] is treated as expression (eval) or single field name (sum)
+  //   - "t1" row: fields[col_key] is t1/t1Summary key to read
+  //   - "computed" row: fields[col_key] is t1Summary computed key
+  const resolveCellValue = (rowDef: any, colDef: any): number => {
+    const ck = colDef.col_key
+    const explicit = rowDef.fields?.[ck]
+
+    if (explicit !== undefined) {
+      // "sum" row: explicit can be an expression (with sum(...) or +) or a field name
+      if (rowDef.data_source === 'sum') {
+        // Try evaluating as expression first
+        if (typeof explicit === 'string' && /[+\-*/()]|\b(?:sum|SaldoAwal)\b/.test(explicit)) {
+          try {
+            return evalT1Expression(explicit, {}, evalCtx)
+          } catch (e: any) {
+            console.warn(`[footerTable.resolveCell] sum expression failed for row="${rowDef.label}" col=${ck}:`, e?.message)
+            return 0
+          }
+        }
+        // Otherwise: sum the named field
+        return sumDataset(detName!, String(explicit))
+      }
+      // "t1" / "computed" row: explicit is a key to read from t1Summary (or raw t1)
+      if (rowDef.data_source === 't1' || rowDef.data_source === 'computed') {
+        if (t1Summary && t1Summary[explicit] !== undefined) {
+          return parseFloat(t1Summary[explicit] || 0)
+        }
+        if (t1 && t1[explicit] !== undefined) {
+          return parseFloat(t1[explicit] || 0)
+        }
+        return 0
+      }
+    }
+    return null as any // signal: no explicit, use legacy fallback
+  }
+
+  const getCellValue = (datasetName: string, fieldName: string): number => {
+    const dataset = reportStore.datasets[datasetName]
+    if (!dataset) return 0
+    const firstRow = dataset[0]
+    return parseFloat(firstRow[fieldName] || 0)
+  }
+
+  const sumDataset = (datasetName: string, fieldName: string): number => {
+    const dataset = reportStore.datasets[datasetName] || []
+    return dataset.reduce((s: number, r: any) => s + parseFloat(r[fieldName] || 0), 0)
   }
 
   const isKCol = (colLabel: string) => /\(K\)|pengeluaran|kredit/i.test(colLabel)
 
   return {
     columns: ft.columns,
-    rows: ft.rows.map(rowLabel => ({
-      label: rowLabel,
-      cells: ft.columns.map(colLabel => {
-        if (rowLabel === 'Jumlah') {
-          const field = colFieldMap[colLabel]
-          if (!field) return 0
-          return t2.reduce((s: number, r: any) => s + parseFloat(r[field] || 0), 0)
+    rows: ft.rows.map(row => {
+      // Normalize row: support both string and object
+      const rowDef: { label: string; data_source?: string; dataset?: string; field?: string; fields?: Record<string, string>; cells?: Array<{ col?: number; expression?: string; field?: string }> } =
+        typeof row === 'string' ? { label: row } : { ...row }
+
+      // Determine which dataset this row reads from
+      const isSumRow = rowDef.data_source === 'sum'
+      const isComputedRow = rowDef.data_source === 'computed'
+      const rowDataset = isSumRow ? (rowDef.dataset || detName) : sumName
+      const isT1Row = rowDataset === sumName
+      const rowData = isT1Row ? t1 : undefined
+
+      // Handle "cells" data_source — per-cell expression override.
+      // Format: {label, data_source:"cells", cells: [{col:0, expression:"sum(Debet) + SaldoAwal"}, ...]}
+      // Each cell expression is evaluated with evalT1Expression ctx (t1, t1Sums, t2Sums).
+      // Cells without col match (or empty cells) fall through to row default.
+      if (rowDef.data_source === 'cells' && t1Summary) {
+        const sumName = summaryDatasetName.value
+        const summaryDs = reportStore.currentReport?.datasets?.find(
+          (d: any) => d.config_json?.display_role === 'summary' && d.nama_dataset === sumName
+        )
+        const cfg: T1SummaryConfig = (summaryDs?.config_json as T1SummaryConfig) || {}
+        const ctxT1: Record<string, number> = {}
+        if (t1) Object.keys(t1).forEach((k) => { ctxT1[k] = num(t1[k]) })
+        const ctxT1Sums: Record<string, number> = {}
+        if (cfg.bon_giro_fields?.length) {
+          cfg.bon_giro_fields.forEach((f) => { ctxT1Sums[f] = num(t1?.[f]) })
+          ctxT1Sums['TotalBonGiro'] = cfg.bon_giro_fields.reduce((s, f) => s + (ctxT1Sums[f] || 0), 0)
         }
-        const map = isKCol(colLabel) ? rowKeyMapK : rowKeyMapD
-        const key = map[rowLabel]
-        if (!key || !summary) return 0
-        return parseFloat(summary[key] || 0)
+        const ctxT2Sums: Record<string, number> = {}
+        ;(cfg.t2_sum_fields || []).forEach((f) => {
+          ctxT2Sums[f] = t2 ? t2.reduce((s: number, r: any) => s + num(r[f]), 0) : 0
+        })
+
+        return {
+          label: rowDef.label,
+          cells: normCols.map((colDef: any, colIdx: number) => {
+            const cellDef = rowDef.cells?.find((c: any) => (c.col === undefined ? colIdx : c.col) === colIdx)
+            if (!cellDef) return 0
+            if (cellDef.field) return parseFloat(t1Summary[cellDef.field] || 0)
+            if (cellDef.expression) {
+              try {
+                return evalT1Expression(cellDef.expression, {}, { t1: ctxT1, t1Sums: ctxT1Sums, t2Sums: ctxT2Sums })
+              } catch (e: any) {
+                console.warn(`[footerTable.cells] row="${rowDef.label}" col=${colIdx} failed:`, e?.message)
+                return 0
+              }
+            }
+            return 0
+          })
+        }
+      }
+
+      // Handle "computed" data_source — reads from t1SummaryData computed properties.
+      // For each column, resolve D/K suffix based on column field (Debet→D, kredit→K).
+      if (isComputedRow && t1Summary) {
+        return {
+          label: rowDef.label,
+          cells: normCols.map(colDef => {
+            // Single-cell mode: explicit field on row (e.g., {label:"Saldo Awal", data_source:"computed", field:"SaldoAwal"})
+            if (rowDef.field) {
+              return parseFloat(t1Summary[rowDef.field] || 0)
+            }
+            // Multi-cell D/K mode: row has 'fields' map {D: '...', K: '...'}
+            //   rowDef.fields = { D: 'SaldoAwalD', K: 'SaldoAwalK' }
+            if (rowDef.fields && colDef.field) {
+              const dirSuffix = colDef.field.toLowerCase() === 'kredit' ? 'K' : 'D'
+              const targetField = rowDef.fields[dirSuffix]
+              if (targetField) return parseFloat(t1Summary[targetField] || 0)
+            }
+            return 0
+          })
+        }
+      }
+
+      const cells = normCols.map(colDef => {
+        // Column config has explicit dataset + field
+        if (colDef.dataset && colDef.field) {
+          // Sum row: sum the specified dataset + field
+          if (isSumRow) {
+            return sumDataset(colDef.dataset, colDef.field)
+          }
+          // T1 row: resolve D/K value based on column direction
+          if (t1Summary) {
+            const t1RowField = rowDef.field
+            if (t1RowField) {
+              // If field name ends with D/K and matches column suffix → use directly
+              const dirSuffix = colDef.field.toLowerCase() === 'kredit' ? 'K' : 'D'
+              if (t1RowField.endsWith(dirSuffix)) {
+                return parseFloat(t1Summary[t1RowField] || 0)
+              }
+              // Field is base name (no suffix): try base + suffix
+              const t1FieldName = t1RowField + dirSuffix
+              if (t1Summary[t1FieldName] !== undefined) {
+                return parseFloat(t1Summary[t1FieldName] || 0)
+              }
+              // Try base field as-is (backward compat)
+              return parseFloat(t1Summary[t1RowField] || 0)
+            }
+          }
+          // Fallback to raw T1
+          if (rowData) {
+            const t1RowField = rowDef.field
+            if (t1RowField) {
+              const dirSuffix = colDef.field.toLowerCase() === 'kredit' ? 'K' : 'D'
+              if (t1RowField.endsWith(dirSuffix)) {
+                return parseFloat(rowData[t1RowField] || 0)
+              }
+              const t1FieldName = t1RowField + dirSuffix
+              if (rowData[t1FieldName] !== undefined) {
+                return parseFloat(rowData[t1FieldName] || 0)
+              }
+              return parseFloat(rowData[t1RowField] || 0)
+            }
+          }
+        }
+
+        const colLabel = colDef.label
+
+        // Legacy: match colDef.label via label_tampil in T1
+        const t1ColMap = sumName ? fieldMaps[sumName] : {}
+        const t2ColMap = detName ? fieldMaps[detName] : {}
+        const t1Key = t1ColMap?.[colLabel]
+        if (t1Key && t1Summary && t1Summary[t1Key] !== undefined) {
+          return parseFloat(t1Summary[t1Key] || 0)
+        }
+        if (t1Key && t1) {
+          return parseFloat(t1[t1Key] || 0)
+        }
+
+        // Legacy: match colDef.label via label_tampil in T2, sum it
+        const t2Key = t2ColMap?.[colLabel]
+        if (t2Key) {
+          return sumDataset(detName!, t2Key)
+        }
+
+        return 0
       })
-    }))
+
+      return { label: rowDef.label, cells }
+    })
   }
+})
+
+// CH/GB panel — separate from footer_table. Renders left-side detail rows from .fr3 (Uang Tunai, CH/GB, Bon, etc.).
+// Config: footer_bands.bands.summary.chgb_panel = {enabled, rows: [{label, field?, expression?}]}
+//   - field: read raw T1 field by name (e.g. "SaldoGiro")
+//   - expression: arithmetic string evaluated with evalT1Expression (t1 + t2 sums)
+const chgbPanel = computed(() => {
+  const cp = reportStore.currentReport?.footer_bands?.bands?.summary?.chgb_panel
+  if (!cp?.enabled || !cp?.rows?.length) return null
+
+  const sumName = summaryDatasetName.value
+  const detName = detailDatasets.value[0]?.nama_dataset
+  const t1 = sumName ? reportStore.datasets[sumName]?.[0] : null
+  const t2 = detName ? (reportStore.datasets[detName] || []) : []
+
+  const summaryDs = reportStore.currentReport?.datasets?.find(
+    (d: any) => d.config_json?.display_role === 'summary' && d.nama_dataset === sumName
+  )
+  const cfg: T1SummaryConfig = (summaryDs?.config_json as T1SummaryConfig) || {}
+
+  const ctxT1: Record<string, number> = {}
+  if (t1) Object.keys(t1).forEach((k) => { ctxT1[k] = num(t1[k]) })
+  const ctxT1Sums: Record<string, number> = {}
+  if (cfg.bon_giro_fields?.length) {
+    cfg.bon_giro_fields.forEach((f) => { ctxT1Sums[f] = num(t1?.[f]) })
+    ctxT1Sums['TotalBonGiro'] = cfg.bon_giro_fields.reduce((s, f) => s + (ctxT1Sums[f] || 0), 0)
+  }
+  const ctxT2Sums: Record<string, number> = {}
+  ;(cfg.t2_sum_fields || []).forEach((f) => {
+    ctxT2Sums[f] = t2 ? t2.reduce((s: number, r: any) => s + num(r[f]), 0) : 0
+  })
+
+  return cp.rows.map((row: any) => {
+    let value = 0
+    try {
+      if (row.field) {
+        value = parseFloat(t1?.[row.field] || 0)
+      } else if (row.expression) {
+        // Build auto-operands: bare tokens → t1 (so SaldoAwal, SaldoGiro, etc. resolve),
+        // sum(X) tokens → sum:t2 (so sum(Debet) resolves).
+        const autoOperands: Record<string, 't1' | 'sum:t2'> = {}
+        for (const tok of row.expression.match(/[A-Za-z_][A-Za-z0-9_]*/g) || []) {
+          if (tok === 'sum') continue
+          if (autoOperands[tok]) continue
+          if (ctxT1[tok] !== undefined) autoOperands[tok] = 't1'
+          else if (ctxT2Sums[tok] !== undefined) autoOperands[tok] = 'sum:t2'
+        }
+        value = evalT1Expression(row.expression, autoOperands, { t1: ctxT1, t1Sums: ctxT1Sums, t2Sums: ctxT2Sums })
+      }
+    } catch (e: any) {
+      console.warn(`[chgbPanel] row="${row.label}" failed:`, e?.message)
+      value = 0
+    }
+    return { label: row.label, value }
+  })
 })
 
 // Get signature items from footer_bands config
@@ -759,22 +1093,30 @@ const effectiveFilters = computed(() => {
 // Summary dataset — driven by config_json.display_role, not hardcoded 'T1'
 const summaryDatasetName = computed(() => {
   const datasets = reportStore.currentReport?.datasets || []
-  const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary')
+  const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary' && d.visible)
   return summaryDs?.nama_dataset || null
 })
 
 // Detail datasets — all datasets that are NOT summary
 const detailDatasets = computed(() => {
   const datasets = reportStore.currentReport?.datasets || []
-  return datasets.filter((d: any) => d.config_json?.display_role !== 'summary')
+  const filtered = datasets.filter((d: any) => d.config_json?.display_role !== 'summary' && d.visible)
+  return filtered
 })
 
 // Number of columns for summary section (from config_json.summary_layout)
-const summaryColumnCount = computed(() => {
+// 'grid_1col' = 1 col, 'grid_2col' = 2 col, 'footer_only' = skip 2-col grid (only show footer_table)
+const summaryLayout = computed(() => {
   const datasets = reportStore.currentReport?.datasets || []
   const summaryDs = datasets.find((d: any) => d.config_json?.display_role === 'summary')
-  return summaryDs?.config_json?.summary_layout === 'grid_1col' ? 1 : 2
+  return summaryDs?.config_json?.summary_layout || 'grid_2col'
 })
+const summaryColumnCount = computed(() => {
+  if (summaryLayout.value === 'grid_1col') return 1
+  if (summaryLayout.value === 'footer_only') return 0
+  return 2
+})
+const showT1SummaryGrid = computed(() => summaryLayout.value !== 'footer_only')
 
 // Side-by-side layout only used when ALL detail datasets have config_json.detail_layout = 'side_by_side'
 // (Neraca special case - Aktiva & Pasiva). Bank Harian with 2 detail datasets (T2 + T3)
@@ -904,7 +1246,7 @@ function formatCell(value: any, columnRef?: string | any): string {
   if (columnRef && typeof columnRef === 'object') {
     lookupKey = columnRef.nama_kolom
     const td = String(columnRef.tipe_data || columnRef.format_type || '').toLowerCase()
-    if (td && ['numeric', 'decimal', 'money', 'currency', 'angka'].includes(td)) {
+    if (td && ['numeric', 'decimal', 'money', 'currency', 'angka', 'number'].includes(td)) {
       colType = 'currency'
     } else if (td && ['percent', 'persen'].includes(td)) {
       colType = 'percent'

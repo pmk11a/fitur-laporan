@@ -1,0 +1,1 @@
+import{Q as u,l as a,R as e}from"./DrLornxH.js";const r=u(i=>{const t=a();if(t.isAuthenticated||t.initFromStorage(),["/login"].includes(i.path))return t.isAuthenticated?e("/dashboard"):void 0;if(!t.isAuthenticated)return e("/login")});export{r as default};
