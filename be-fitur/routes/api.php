@@ -7,6 +7,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\BrowseController;
 use App\Http\Controllers\AdminReportController;
 use App\Http\Controllers\Api\UserPreferenceController;
+use App\Http\Controllers\NotaController;
 
 /*
 |--------------------------------------------------------------------------
@@ -39,6 +40,11 @@ Route::prefix('reports')->group(function () {
     Route::get('/perkiraan/search', [ReportController::class, 'searchPerkiraan']);
     Route::get('/{kodeMenu}', [ReportController::class, 'show']);
     Route::post('/{kodeMenu}/preview', [ReportController::class, 'preview']);
+});
+
+// Nota print (PDF)
+Route::prefix('nota')->group(function () {
+    Route::get('/{kode}/print', [NotaController::class, 'print']);
 });
 
 // User preferences — universal key-value store
