@@ -36,7 +36,22 @@ class BrowseController extends Controller
         $limit = (int) $request->query('limit', 20);
         $userMode = $request->query('userMode');
 
-        $results = $this->browseService->search($kodeBrowse, $q, $limit, $userMode);
+        $parentRaw = $request->query('parent', []);
+        $parentParams = [];
+        if (is_array($parentRaw) && !empty($parentRaw)) {
+            $config = $this->browseService->getConfig($kodeBrowse);
+            $allowedKeys = [];
+            if (!empty($config['parent_filters'])) {
+                foreach ($config['parent_filters'] as $pf) {
+                    if (isset($pf['source_column'])) {
+                        $allowedKeys[] = $pf['source_column'];
+                    }
+                }
+            }
+            $parentParams = array_intersect_key($parentRaw, array_flip($allowedKeys));
+        }
+
+        $results = $this->browseService->search($kodeBrowse, $q, $limit, $userMode, $parentParams);
 
         // Return with JSON_INVALID_UTF8_IGNORE to handle any remaining bad bytes
         return response()->json([

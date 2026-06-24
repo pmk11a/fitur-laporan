@@ -259,12 +259,14 @@ interface Props {
   mode?: 'single' | 'tags' | 'checkbox'
   placeholder?: string
   disabled?: boolean
+  parentFilters?: Record<string, string>
 }
 
 const props = withDefaults(defineProps<Props>(), {
   mode: 'single',
   placeholder: 'Ketik untuk mencari...',
   disabled: false,
+  parentFilters: undefined,
 })
 
 onMounted(async () => {
@@ -372,6 +374,8 @@ const knownFieldMap: Record<string, { keyField: string; labelField: string }> = 
   '100412': { keyField: 'NoMuka', labelField: 'Keterangan' },
   '100405': { keyField: 'NoGiro', labelField: 'Bank' },
   '100406': { keyField: 'NoGiro', labelField: 'Bank' },
+  '100408': { keyField: 'Perkiraan', labelField: 'Keterangan' },
+  '100409': { keyField: 'Perkiraan', labelField: 'Keterangan' },
   '1006': { keyField: 'KodeVls', labelField: 'NamaVls' },
   '11001': { keyField: 'KodeVls', labelField: 'NamaVls' },
   '2082': { keyField: 'KodeVls', labelField: 'NamaVls' },
@@ -445,10 +449,10 @@ async function runSearch(q: string) {
   hasSearched.value = true
   highlightedIndex.value = -1
 
-  const data = await browse.search(qTrimmed)
+  const data = await browse.search(qTrimmed, 20, props.parentFilters)
   if (qTrimmed !== searchText.value.trim()) return
   browse.results = data
-  isOpen.value = data.length > 0
+  isOpen.value = true  // Always open dropdown on search (show results or "no results" message)
 }
 
 function onFocus() {
@@ -476,7 +480,7 @@ async function validateCurrentInput() {
   const code = searchText.value.trim()
   if (!code) return
 
-  const result = await browse.validate(code)
+  const result = await browse.validate(code, props.parentFilters)
   if (result) {
     // Found — set value
     selectItem(result)
@@ -564,7 +568,7 @@ async function validateTagsFromCodes(codes: string[]) {
     return
   }
 
-  const validated = await browse.validateBatch(codes)
+  const validated = await browse.validateBatch(codes, props.parentFilters)
   selectedItems.value = validated.map((v) => {
     const keyField = getKeyField()
     const labelField = getLabelField()
@@ -620,7 +624,7 @@ async function openCheckboxDialog() {
   checkboxDialogOpen.value = true
 
   // Load all data
-  const all = await browse.getAll(500)
+  const all = await browse.getAll(500, props.parentFilters)
   checkboxResults.value = all
   checkboxSelected.value = Array.isArray(props.modelValue) ? [...props.modelValue] : []
 
@@ -651,13 +655,13 @@ function onCheckboxSearch() {
 async function filterCheckboxResults(q: string) {
   if (!q.trim()) {
     // Reset to all
-    const all = await browse.getAll(500)
+    const all = await browse.getAll(500, props.parentFilters)
     checkboxResults.value = all
     return
   }
 
   const qTrimmed = q.trim()
-  const all = await browse.getAll(500)
+  const all = await browse.getAll(500, props.parentFilters)
   checkboxResults.value = all.filter((item) => {
     const key = getKey(item).toLowerCase()
     const label = getLabel(item).toLowerCase()

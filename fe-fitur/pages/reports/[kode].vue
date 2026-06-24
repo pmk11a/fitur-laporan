@@ -114,7 +114,7 @@
               <input
                 v-if="filter.type === 'date'"
                 type="date"
-                v-model="dynamicFilterValues[filter.id]"
+                v-model="dynamicFilterValues[filter.nama_filter]"
                 class="input-field"
               />
 
@@ -122,7 +122,7 @@
               <input
                 v-else-if="filter.type === 'text'"
                 type="text"
-                v-model="dynamicFilterValues[filter.id]"
+                v-model="dynamicFilterValues[filter.nama_filter]"
                 class="input-field"
                 :placeholder="filter.label"
               />
@@ -131,23 +131,24 @@
               <input
                 v-else-if="filter.type === 'number'"
                 type="number"
-                v-model="dynamicFilterValues[filter.id]"
+                v-model="dynamicFilterValues[filter.nama_filter]"
                 class="input-field"
               />
 
               <!-- Browse Autocomplete (generic) -->
               <BrowseAutocomplete
                 v-else-if="filter.type === 'browse'"
-                v-model="dynamicFilterValues[filter.id]"
+                v-model="dynamicFilterValues[filter.nama_filter]"
                 :browse-type="filter.kode_browse || 'perkiraan'"
                 :mode="getFilterMode(filter)"
                 :placeholder="filter.label"
+                :parent-filters="resolveParentFilters(filter)"
               />
 
               <!-- Legacy perkiraan type (maps to browse) -->
               <BrowseAutocomplete
                 v-else-if="filter.type === 'perkiraan'"
-                v-model="dynamicFilterValues[filter.id]"
+                v-model="dynamicFilterValues[filter.nama_filter]"
                 browse-type="perkiraan"
                 mode="single"
                 :placeholder="filter.label"
@@ -157,7 +158,7 @@
               <input
                 v-else
                 type="text"
-                v-model="dynamicFilterValues[filter.id]"
+                v-model="dynamicFilterValues[filter.nama_filter]"
                 class="input-field"
               />
             </div>
@@ -1013,12 +1014,20 @@ function getT1Label(key: string): string {
 const dynamicFilterValues = ref<Record<string, string>>({})
 
 // Sync dynamicFilterValues from store after initializeFilters runs
+// Preserve user-input values — only overwrite with store defaults if the field is empty
 watch(() => [reportStore.filters, reportStore.defaultPeriod], () => {
   const defaults = reportStore.defaultPeriod
+  const prevValues = { ...dynamicFilterValues.value }
   const newValues: Record<string, string> = {}
 
+  // Start with previously saved user values (so they persist across watch triggers)
+  Object.assign(newValues, prevValues)
+
+  // Only fill in from store defaults if field is empty
   for (const [key, val] of Object.entries(reportStore.filters)) {
-    newValues[key] = String(val ?? '')
+    if (!newValues[key]) {
+      newValues[key] = String(val ?? '')
+    }
   }
 
   // Fill any missing date filters from defaultPeriod
@@ -1029,13 +1038,21 @@ watch(() => [reportStore.filters, reportStore.defaultPeriod], () => {
       if (tipe === 'date' && !newValues[name]) {
         if (name.toLowerCase().includes('awal') || name.toLowerCase().includes('mulai')) {
           newValues[name] = defaults.tglAwal
-        } else if (name.toLowerCase().includes('akhir') || name.toLowerCase().includes('sampai')) {
+        } else if (name.toLowerCase().includes('akhir') && !name.toLowerCase().includes('akun') && !name.toLowerCase().includes('perkiraan')) {
           newValues[name] = defaults.tglAkhir
         } else {
           newValues[name] = defaults.tglAwal
         }
       }
     }
+  }
+
+  // Delphi sync: kode supplier awal → akhir (mirrors Delphi Awal8/Akhir8 behavior)
+  // When user picks a supplier via browse on kodesupp field, kodesupp1 auto-fills the same value.
+  const kodeSupp = newValues['kodesupp'] ?? newValues['Awal8'] ?? ''
+  if (kodeSupp) {
+    newValues['kodesupp1'] = kodeSupp
+    newValues['Akhir8'] = kodeSupp
   }
 
   dynamicFilterValues.value = newValues
@@ -1062,12 +1079,14 @@ const effectiveFilters = computed(() => {
 
       return {
         id: f.nama_filter,
+        nama_filter: f.nama_filter,
         label: f.label || f.nama_filter.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim(),
         type: f.tipe_input || 'text',
         required: f.wajib_isi,
         defaultValue: f.nilai_default,
         kode_browse: kodeBrowse,
-        mode: mode
+        mode: mode,
+        konfigurasi: f.konfigurasi
       }
     })
   }
@@ -1075,6 +1094,30 @@ const effectiveFilters = computed(() => {
   // No filters in DB = no filter UI (matching Delphi -1 behavior)
   return []
 })
+
+// ===== Parent Filter Resolver =====
+// Resolve parent filter values from sibling dynamicFilterValues based on filter configuration
+function resolveParentFilters(filter: any): Record<string, string> | null {
+  const config = filter.konfigurasi
+  const parsedConfig = typeof config === 'string' ? JSON.parse(config) : (config || {})
+  const parentFiltersDef = parsedConfig.parent_filters || []
+  if (!Array.isArray(parentFiltersDef) || parentFiltersDef.length === 0) {
+    return null
+  }
+
+  const resolved: Record<string, string> = {}
+  for (const pf of parentFiltersDef) {
+    const sourceKey = pf.source || pf.source_column
+    if (!sourceKey) continue
+    const siblingValue = dynamicFilterValues.value[sourceKey]
+    if (siblingValue && String(siblingValue).trim()) {
+      const targetKey = pf.target || sourceKey
+      resolved[targetKey] = String(siblingValue).trim()
+    }
+  }
+
+  return Object.keys(resolved).length > 0 ? resolved : null
+}
 
 // ===== Generic Multi-Dataset Support =====
 // Summary dataset — driven by config_json.display_role, not hardcoded 'T1'
@@ -1206,6 +1249,15 @@ async function generateReport() {
   const allFilters = {
     ...reportStore.filters,
     ...dynamicFilterValues.value
+  }
+
+  // Delphi sync: kode supplier awal → akhir (mirrors Delphi Awal8/Akhir8 behavior)
+  // When user picks a supplier via browse on kodesupp field, kodesupp1 auto-fills.
+  // Only enforce if kodesupp1 was NOT already set by the user.
+  const kodeSupp = allFilters.kodesupp ?? allFilters.Awal8 ?? ''
+  if (kodeSupp && (!allFilters.kodesupp1 && !allFilters.Akhir8)) {
+    allFilters.kodesupp1 = kodeSupp
+    allFilters.Akhir8 = kodeSupp
   }
 
   if (kodeMenu.value) {

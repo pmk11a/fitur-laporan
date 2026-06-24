@@ -52,6 +52,20 @@ For multi-step tasks, state a brief plan:
 3. [Step] → verify: [check]
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+## 5b. Proactive Pattern Audit (After Each Fix)
+
+**RULE**: When fixing a bug caused by an anti-pattern (e.g. `str_replace` collision, `\b` regex bug), search for the SAME anti-pattern elsewhere BEFORE claiming "fixed".
+
+Workflow:
+```
+1. Identify the bug class (e.g. "str_replace substring collision")
+2. Grep codebase for ALL instances of the same pattern
+3. Fix all at once — not just the one user reported
+4. Verify with tests
+```
+
+Why: User reported `kodesupp1` corruption; root cause was `str_replace` substring. There were OTHER `str_replace` calls elsewhere (e.g. `@IDUser` handler in ReportService) that had the same fragility. Surface fixes look helpful; deep fixes prevent recurrence.
+
 These guidelines are working if: fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
 ## 6. Memory System

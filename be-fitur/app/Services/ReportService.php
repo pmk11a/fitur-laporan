@@ -288,8 +288,9 @@ class ReportService
                     'tipe_input' => $p->tipe_input,
                     'wajib_isi' => (bool) $p->wajib_isi,
                     'nilai_default' => $p->nilai_default,
-                    'kode_browse' => $konfigurasi['kode_browse'] ?? null,
+                    'kode_browse' => $p->kode_browse ?? ($konfigurasi['kode_browse'] ?? null),
                     'mode' => $konfigurasi['mode'] ?? null,  // 'single', 'tags', 'checkbox'
+                    'konfigurasi' => $konfigurasi,  // full JSON: parent_filters, etc.
                 ];
             }, $params);
         } catch (\Exception $e) {
@@ -518,13 +519,29 @@ class ReportService
 
         $sql = $queryDef->query_sumber_data;
 
-        // Parse config_json for static parameters (e.g., JenisJurnal = 'BKM')
+        // Parse config_json for static parameters and display config.
+        // Supports two forms:
+        //  1. Flat keys (e.g. {"JenisJurnal": "BKM"}) treated as static params.
+        //  2. Nested object (e.g. {"display_role":"detail","static_params":{"Recap":"0"}}).
+        //     Keys other than "static_params" are treated as display config.
         $staticParams = [];
+        $displayConfig = [];
         if (!empty($queryDef->config_json)) {
             try {
                 $decoded = json_decode($queryDef->config_json, true);
                 if (is_array($decoded)) {
-                    $staticParams = $decoded;
+                    if (isset($decoded['static_params']) && is_array($decoded['static_params'])) {
+                        // Nested form: keys outside static_params are display config
+                        $staticParams = $decoded['static_params'];
+                        foreach ($decoded as $k => $v) {
+                            if ($k !== 'static_params') {
+                                $displayConfig[$k] = $v;
+                            }
+                        }
+                    } else {
+                        // Flat form: all keys are static params (backward compatible)
+                        $staticParams = $decoded;
+                    }
                 }
             } catch (\Exception $e) {
                 // Ignore JSON parse errors
@@ -532,10 +549,12 @@ class ReportService
         }
 
         // Replace static params from config_json first (e.g., @JenisJurnal from JenisJurnal)
+        // Sort by length DESC for defense in depth (e.g. @kodereport before @kode)
+        uksort($staticParams, fn($a, $b) => strlen($b) - strlen($a));
         foreach ($staticParams as $key => $value) {
             $placeholder = '@' . $key;
-            if (str_contains($sql, $placeholder)) {
-                $sql = str_replace($placeholder, "'" . addslashes((string) $value) . "'", $sql);
+            if (preg_match('/(?<!\w)' . preg_quote($placeholder, '/') . '(?!\w)/i', $sql)) {
+                $sql = preg_replace('/(?<!\w)' . preg_quote($placeholder, '/') . '(?!\w)/i', "'" . addslashes((string) $value) . "'", $sql, 1);
             }
         }
 
@@ -545,6 +564,13 @@ class ReportService
         // Replace @param placeholders with explicit values from filters
         $userId = null;
         $droppedFilters = [];
+
+        // Sort filters by placeholder length DESCENDING so that longer placeholders
+        // (e.g. @kodesupp1) are replaced BEFORE shorter ones (e.g. @kodesupp).
+        // Defense in depth: even though our lookaround regex would never
+        // substring-match, this guarantees the replacement order is always correct.
+        uksort($filters, fn($a, $b) => strlen($b) - strlen($a));
+
         foreach ($filters as $key => $value) {
             // Extract user ID if present
             if ($key === 'userId' && $value) {
@@ -552,23 +578,7 @@ class ReportService
             }
 
             $placeholder = '@' . $key;
-            if (!str_contains($sql, $placeholder)) {
-                // Fallback: case-insensitive match for SQL Server params.
-                // PHP `str_contains`/`str_replace` are case-sensitive but SQL
-                // Server treats `@PerkiraanA` and `@perkinramaA` the same.
-                $caseInsensitivePlaceholder = '@' . $key;
-                if (stripos($sql, $caseInsensitivePlaceholder) !== false) {
-                    $escapedValue = (is_array($value) && count($value) > 0)
-                        ? implode(',', array_map(fn($v) => "'" . addslashes((string) $v) . "'", $value))
-                        : (($value === '' || $value === null) ? 'NULL'
-                            : "'" . addslashes((string) $value) . "'");
-                    $sql = preg_replace(
-                        '/\b' . preg_quote($caseInsensitivePlaceholder, '/') . '\b/i',
-                        $escapedValue,
-                        $sql
-                    );
-                    continue;
-                }
+            if (!preg_match('/(?<!\w)' . preg_quote($placeholder, '/') . '(?!\w)/i', $sql)) {
                 // Filter supplied by client but query has no matching @placeholder
                 // → it would be silently ignored. Log it so misconfigurations are visible.
                 if ($key !== 'userId' && $value !== '' && $value !== null) {
@@ -582,18 +592,18 @@ class ReportService
             if (is_array($value) && count($value) > 0) {
                 $escaped = array_map(fn($v) => "'" . addslashes((string) $v) . "'", $value);
                 $inClause = implode(',', $escaped);
-                $sql = str_replace($placeholder, $inClause, $sql);
+                $sql = preg_replace('/(?<!\w)' . preg_quote($placeholder, '/') . '(?!\w)/i', $inClause, $sql, 1);
             } elseif (is_array($value) && count($value) === 0) {
                 // Empty array → no filter applied. Replace placeholder with NULL
                 // so SPs that check `WHERE col = @X OR @X IS NULL` work correctly.
-                $sql = str_replace($placeholder, 'NULL', $sql);
+                $sql = preg_replace('/(?<!\w)' . preg_quote($placeholder, '/') . '(?!\w)/i', 'NULL', $sql, 1);
             } elseif ($value === '' || $value === null) {
                 // Empty scalar → treat as NULL (no filter applied to SP)
                 // Use NULL so stored procedures that check @param IS NULL can return all rows
-                $sql = str_replace($placeholder, 'NULL', $sql);
+                $sql = preg_replace('/(?<!\w)' . preg_quote($placeholder, '/') . '(?!\w)/i', 'NULL', $sql, 1);
             } else {
                 // Scalar value — escape and replace
-                $sql = str_replace($placeholder, "'" . addslashes((string) $value) . "'", $sql);
+                $sql = preg_replace('/(?<!\w)' . preg_quote($placeholder, '/') . '(?!\w)/i', "'" . addslashes((string) $value) . "'", $sql, 1);
             }
         }
 
@@ -605,29 +615,37 @@ class ReportService
             ]);
         }
 
+        // For EXEC SP queries: replace any remaining @placeholder that didn't come
+        // from filters or static config with NULL. This prevents
+        // "Must declare the scalar variable" errors when dbquerylaporan references
+        // a parameter (e.g. @Recap in Sp_ReportKartuHutang) that has no
+        // matching row in dbparameterlaporan or config_json.
+        // Use lookaround (?<!\w)...(?!\w) — NOT \b — to avoid PHP word-boundary
+        // inconsistencies around @ and case-insensitive identifier matching.
+        if (preg_match('/^\s*EXEC\s+/i', $sql) && preg_match('/(?<!\w)@\w+/i', $sql)) {
+            $sql = preg_replace('/(?<!\w)@[A-Za-z_]\w*(?!\w)/', 'NULL', $sql);
+        }
+
         // Handle @IDUser - get from userId filter or from authenticated user
-        if (str_contains($sql, '@IDUser')) {
+        if (preg_match('/(?<!\w)@IDUser(?!\w)/i', $sql)) {
             if ($userId) {
-                $sql = str_replace('@IDUser', "'" . addslashes($userId) . "'", $sql);
+                $replacement = "'" . addslashes($userId) . "'";
             } else {
                 // Try to get from Laravel auth
                 try {
                     $userId = auth()->user()->USERID ?? null;
-                    if ($userId) {
-                        $sql = str_replace('@IDUser', "'" . addslashes($userId) . "'", $sql);
-                    } else {
-                        $sql = str_replace('@IDUser', "''", $sql);
-                    }
+                    $replacement = $userId ? ("'" . addslashes($userId) . "'") : "''";
                 } catch (\Exception $e) {
-                    $sql = str_replace('@IDUser', "''", $sql);
+                    $replacement = "''";
                 }
             }
+            $sql = preg_replace('/(?<!\w)@IDUser(?!\w)/i', $replacement, $sql, 1);
         }
 
         // Handle @UserID - same source as @IDUser but case may differ from the
         // filter key (`userId`). Match case-insensitively so queries like
         // `EXEC sp_xxx ..., @UserID, 'T'` resolve correctly.
-        if (preg_match('/@UserID\b/i', $sql)) {
+        if (preg_match('/(?<!\w)@UserID(?!\w)/i', $sql)) {
             $resolved = $userId;
             if (!$resolved) {
                 try {
@@ -637,18 +655,22 @@ class ReportService
                 }
             }
             $replacement = $resolved ? "'" . addslashes((string) $resolved) . "'" : "''";
-            $sql = preg_replace('/@UserID\b/i', $replacement, $sql);
+            $sql = preg_replace('/(?<!\w)@UserID(?!\w)/i', $replacement, $sql, 1);
         }
 
         // Execute query directly with substituted values
         try {
             Log::info('[ReportService::executeQuery] dataset=' . $namaDataset . ' | filters=' . json_encode($filters) . ' | sql=' . $sql);
 
-            // Fallback: if any @placeholder remains unreplaced (no filter provided)
-            // → remove entire WHERE clause containing it (safer than replacing with '')
-            if (preg_match('/@\w+/', $sql)) {
-                // Simple approach: if @SelectedItems or @filter remains,
-                // just remove the entire WHERE clause to select all rows.
+            // Fallback: if any @placeholder remains unreplaced in a SELECT query
+            // (no filter or static config provided), remove the entire WHERE clause
+            // containing it. This is safer than leaving the @placeholder as-is
+            // (which would fail with "Must declare the scalar variable").
+            // For EXEC SP queries, residual @placeholders were already replaced
+            // with NULL above (so the SP can be invoked with all-null arguments).
+            if (preg_match('/(?<!\w)@\w+(?!\w)/', $sql)) {
+                Log::warning('[ReportService::executeQuery] residual @placeholder detected in dataset=' . $namaDataset . ' — stripping WHERE clause. sql=' . $sql);
+                // Just remove the entire WHERE clause to select all rows.
                 // This handles the common case: "WHERE col IN (@X) OR @X IS NULL"
                 // strips everything after WHERE up to the next ORDER/GROUP/etc keyword
                 $sql = preg_replace(
@@ -665,6 +687,13 @@ class ReportService
             $results = DB::connection('sqlsrv')->select($sql);
         } catch (\Exception $e) {
             throw new \Exception("Dataset {$namaDataset}: " . $e->getMessage());
+        }
+
+        if (empty($results)) {
+            \Log::warning("ReportService dataset {$namaDataset} returned 0 rows", [
+                'sql' => $sql,
+                'filters' => $filters,
+            ]);
         }
 
         // Convert from Windows-1252 to UTF-8 (only strip null bytes)

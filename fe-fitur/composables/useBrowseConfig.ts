@@ -99,6 +99,9 @@ export function useBrowseConfig() {
       '10053': { kodeBrowse: '10053', keyField: 'Perkiraan', labelField: 'Keterangan', additionalFields: [] },
       '10054': { kodeBrowse: '10054', keyField: 'Nomor', labelField: 'Keterangan', additionalFields: [] },
       'perkiraan': { kodeBrowse: '1005', keyField: 'Perkiraan', labelField: 'Keterangan', additionalFields: [] },
+      // Hutang/ Piutang account codes (used by reports 020301-020306)
+      '100409': { kodeBrowse: '100409', keyField: 'Perkiraan', labelField: 'Keterangan', additionalFields: [] },
+      '100408': { kodeBrowse: '100408', keyField: 'Perkiraan', labelField: 'Keterangan', additionalFields: [] },
       // Devisi
       '1004': { kodeBrowse: '1004', keyField: 'Devisi', labelField: 'NamaDevisi', additionalFields: [] },
       // Customer/Supplier

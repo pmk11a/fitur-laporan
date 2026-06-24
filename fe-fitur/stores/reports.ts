@@ -452,10 +452,16 @@ export const useReportStore = defineStore('report', {
         }
 
         const tipe = filter.tipe_input || ''
+        const filterName = (filter.nama_filter || '').toLowerCase()
+        const filterLabel = (filter.label || '').toLowerCase()
+        const filterCombined = `${filterLabel} ${filterName}`
+
         if (tipe === 'date') {
-          if (filter.nama_filter === 'TanggalAwal' || filter.nama_filter === 'tglAwal') {
+          const isAwal = filterName.includes('awal') || filterName.includes('mulai') || filterLabel.includes('awal')
+          const isAkhir = filterName.includes('akhir') || filterLabel.includes('akhir')
+          if (isAwal) {
             this.filters[filter.nama_filter] = this.defaultPeriod?.tglAwal ?? ''
-          } else if (filter.nama_filter === 'TanggalAkhir' || filter.nama_filter === 'tglAkhir') {
+          } else if (isAkhir) {
             this.filters[filter.nama_filter] = this.defaultPeriod?.tglAkhir ?? ''
           } else {
             this.filters[filter.nama_filter] = this.defaultPeriod?.tglAwal ?? ''

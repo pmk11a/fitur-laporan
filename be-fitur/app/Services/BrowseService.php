@@ -86,13 +86,33 @@ class BrowseService
                 'whereExtra' => "AND DBPERKIRAAN.Tipe = 1",
             ],
 
-            // ==================== CUSTOMER / SUPPLIER ====================
+            // ==================== HUTANG / PIUTANG ACCOUNTS ====================
+            // Hutang accounts (Kode='HT') - used by 20301, 20302, 20303, 20304, 20305
+            '100409' => [
+                'table'  => 'DBPERKIRAAN',
+                'keyField' => 'Perkiraan',
+                'labelField' => 'Keterangan',
+                'additionalFields' => [],
+                'joins' => ['INNER JOIN DBPOSTHUTPIUT pht ON pht.Perkiraan = DBPERKIRAAN.Perkiraan'],
+                'whereExtra' => "AND pht.Kode = 'HT'",
+            ],
+            // Piutang accounts (Kode='PT') - used by 20401, 20402, 20403, 20404, 20405
+            '100408' => [
+                'table'  => 'DBPERKIRAAN',
+                'keyField' => 'Perkiraan',
+                'labelField' => 'Keterangan',
+                'additionalFields' => [],
+                'joins' => ['INNER JOIN DBPOSTHUTPIUT pht ON pht.Perkiraan = DBPERKIRAAN.Perkiraan'],
+                'whereExtra' => "AND pht.Kode = 'PT'",
+            ],
+
+            // ==================== GUDANG ====================
             '10141' => [
                 'table'  => 'vwBrowsSupp',
                 'keyField' => 'KodeCustSupp',
                 'labelField' => 'NamaCustSupp',
                 'additionalFields' => ['Alamat', 'Telpon'],
-                'whereExtra' => "WHERE IsAktif = 1",
+                'whereExtra' => "WHERE IsAktif = 1 AND Jenis = 2",
             ],
             '10142' => [
                 'table'  => 'vwBrowsCust',
@@ -109,12 +129,20 @@ class BrowseService
                 'whereExtra' => "WHERE IsAktif = 1",
             ],
             '1014' => [
-                'table'  => 'DBPERKCUSTSUPP',
+                'table'  => 'vwGroupCustSupp',
                 'keyField' => 'KodeCustSupp',
-                'labelField' => 'NamaCustSupp',
-                'additionalFields' => ['Alamat', 'Kota', 'Perkiraan'],
-                'joins' => ['LEFT JOIN DBCUSTSUPP cs ON cs.KodeCustSupp = DBPERKCUSTSUPP.KodeCustSupp'],
+                'labelField' => 'cs_NamaCustSupp',
+                'additionalFields' => ['cs_Alamat', 'cs_Kota', 'Perkiraan'],
+                'joins' => ['LEFT JOIN DBCUSTSUPP cs ON cs.KodeCustSupp = vwGroupCustSupp.KodeCustSupp'],
                 'whereExtra' => null,
+                'alias_fields' => [
+                    'cs_NamaCustSupp' => 'cs.NamaCustSupp',
+                    'cs_Alamat' => "RTRIM(LTRIM(ISNULL(cs.Alamat1,'') + CASE WHEN ISNULL(cs.Alamat2,'')='' THEN '' ELSE ' ' + cs.Alamat2 END))",
+                    'cs_Kota' => 'cs.Kota',
+                ],
+                'parent_filters' => [
+                    ['source_column' => 'Perkiraan', 'operator' => '=', 'type' => 'exact'],
+                ],
             ],
 
             // ==================== BARANG ====================
@@ -509,7 +537,7 @@ class BrowseService
      * @param string|null $userMode  User mode for access filter
      * @return array
      */
-    public function search(string $kodeBrowse, string $q = '', int $limit = 20, ?string $userMode = null): array
+    public function search(string $kodeBrowse, string $q = '', int $limit = 20, ?string $userMode = null, array $parentFilters = []): array
     {
         $config = $this->getConfig($kodeBrowse);
         if (!$config) {
@@ -522,10 +550,17 @@ class BrowseService
         $additionalFields = $config['additionalFields'] ?? [];
         $joins = $config['joins'] ?? [];
         $whereExtra = $config['whereExtra'] ?? '';
+        $aliasFields = $config['alias_fields'] ?? [];
+        $bindings = [];
 
-        // Build SELECT
+        // Build SELECT — use alias_fields for prefixed fields (e.g. cs_NamaCustSupp → cs.NamaCustSupp)
         $selectFields = array_merge([$keyField, $labelField], $additionalFields);
-        $selectList = implode(', ', array_map(fn($f) => "{$table}.{$f}", $selectFields));
+        $selectList = implode(', ', array_map(function ($f) use ($table, $aliasFields) {
+            if (isset($aliasFields[$f])) {
+                return $aliasFields[$f] . " AS {$f}";
+            }
+            return "{$table}.{$f}";
+        }, $selectFields));
 
         // Build base query
         $sql = "SELECT TOP {$limit} {$selectList} FROM {$table}";
@@ -536,22 +571,52 @@ class BrowseService
         }
 
         // Build WHERE
-        $conditions = [];
         if ($q !== '') {
-            $conditions[] = "({$table}.{$keyField} LIKE :q1 OR {$table}.{$labelField} LIKE :q2)";
-        }
-        if ($whereExtra) {
-            $conditions[] = ltrim($whereExtra, 'AND ');
+            // Resolve label column (may be aliased from another table)
+            $labelCol = isset($aliasFields[$labelField])
+                ? $aliasFields[$labelField]
+                : "{$table}.{$labelField}";
+            $whereClause = "({$table}.{$keyField} LIKE :q1 OR {$labelCol} LIKE :q2)";
+        } else {
+            $whereClause = '';
         }
 
-        if (!empty($conditions)) {
-            $sql .= ' WHERE ' . implode(' AND ', $conditions);
+        if ($whereExtra) {
+            // Strip any leading WHERE/AND/OR and normalize
+            $extra = preg_replace('/^\s*(WHERE|AND|OR)\s+/i', '', $whereExtra);
+            if (!empty($extra)) {
+                if (!empty($whereClause)) {
+                    $whereClause .= ' AND ' . $extra;
+                } else {
+                    $whereClause = $extra;
+                }
+            }
+        }
+
+        // Inject parent_filters if defined in config and values provided
+        $pfConfig = $config['parent_filters'] ?? [];
+        if (!empty($pfConfig) && !empty($parentFilters)) {
+            foreach ($pfConfig as $pfIdx => $pf) {
+                $fieldName = $pf['source_column'];
+                if (!isset($parentFilters[$fieldName])) {
+                    continue;
+                }
+                $op = $pf['operator'] ?? '=';
+                $qualifiedCol = "{$table}.{$fieldName}";
+                $bindingKey = "parent{$pfIdx}";
+                $whereClause .= empty($whereClause) ? "" : " AND ";
+                $whereClause .= "{$qualifiedCol} {$op} :{$bindingKey}";
+                $bindings[$bindingKey] = $parentFilters[$fieldName];
+            }
+        }
+
+        if (!empty(trim($whereClause))) {
+            $sql .= ' WHERE ' . $whereClause;
         }
 
         // Order by key field
         $sql .= " ORDER BY {$table}.{$keyField}";
 
-        $bindings = [];
         if ($q !== '') {
             $bindings['q1'] = "%{$q}%";
             $bindings['q2'] = "%{$q}%";
@@ -599,7 +664,11 @@ class BrowseService
 
         $sql = "SELECT TOP 1 * FROM {$table} WHERE {$keyField} = :code";
         if ($whereExtra) {
-            $sql .= ' AND ' . ltrim($whereExtra, 'AND ');
+            // Strip any leading WHERE/AND/OR and normalize
+            $extra = preg_replace('/^\s*(WHERE|AND|OR)\s+/i', '', $whereExtra);
+            if (!empty(trim($extra))) {
+                $sql .= ' AND ' . trim($extra);
+            }
         }
 
         try {

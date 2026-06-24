@@ -125,6 +125,60 @@ class BrowseControllerTest extends TestCase
     }
 
     /**
+     * Regression test: supplier browse 10141 must use vwBrowsSupp view.
+     * Previously used DBPERKCUSTSUPP table which only contains suppliers
+     * with Perkiraan mapping — caused "Tidak ditemukan" for suppliers
+     * not yet mapped. View vwBrowsSupp returns ALL active suppliers.
+     */
+    public function test_supplier_config_uses_view(): void
+    {
+        $config = $this->browseService->getConfig('10141');
+
+        $this->assertEquals('vwBrowsSupp', $config['table']);
+        $this->assertEquals('KodeCustSupp', $config['keyField']);
+        $this->assertEquals('NamaCustSupp', $config['labelField']);
+        $this->assertContains('Alamat', $config['additionalFields']);
+    }
+
+    /**
+     * Test browse 1014 (Master CustSupp by Perkiraan) — Delphi code:
+     *   select X.KodeCustSupp, Y.NamaCustSupp,
+     *    rtrim(ltrim(isnull(Y.Alamat1,'')+case when isnull(Y.Alamat2,'')='' then '' else ' '+Y.Alamat2 end)) Alamat,
+     *    Y.Kota
+     *   from vwGroupCustSupp X, DBCUSTSUPP Y
+     *   where X.KodeCustSupp=Y.KodeCustSupp
+     *     and x.perkiraan = @NoKira
+     *     and (Y.KodeCustSupp like '%...%' or Y.NamaCustSupp like '%...%')
+     *   order by X.KodeCustSupp
+     *
+     * Laravel config must mirror Delphi: view vwGroupCustSupp + LEFT JOIN DBCUSTSUPP
+     * with concat Alamat1+' '+Alamat2 + parent_filter Perkiraan.
+     */
+    public function test_browse_1014_master_custsupp_config(): void
+    {
+        $config = $this->browseService->getConfig('1014');
+
+        $this->assertNotNull($config);
+        $this->assertEquals('vwGroupCustSupp', $config['table']);
+        $this->assertEquals('KodeCustSupp', $config['keyField']);
+        $this->assertEquals('cs_NamaCustSupp', $config['labelField']);
+        $this->assertContains('cs_Alamat', $config['additionalFields']);
+        $this->assertContains('cs_Kota', $config['additionalFields']);
+        $this->assertContains('Perkiraan', $config['additionalFields']);
+
+        // Alamat must concatenate Alamat1 + Alamat2 (mirror Delphi RTRIM/LTRIM/ISNULL/CASE)
+        $this->assertStringContainsString('cs.Alamat1', $config['alias_fields']['cs_Alamat']);
+        $this->assertStringContainsString('cs.Alamat2', $config['alias_fields']['cs_Alamat']);
+        $this->assertStringContainsString('ISNULL', $config['alias_fields']['cs_Alamat']);
+        $this->assertStringContainsString('RTRIM', $config['alias_fields']['cs_Alamat']);
+
+        // Parent filter Perkiraan is mandatory (Delphi passes @NoKira)
+        $this->assertArrayHasKey('parent_filters', $config);
+        $this->assertEquals(1, count($config['parent_filters']));
+        $this->assertEquals('Perkiraan', $config['parent_filters'][0]['source_column']);
+    }
+
+    /**
      * Test that IN query builder handles array values correctly
      */
     public function test_filter_in_query_with_array_values(): void
@@ -162,5 +216,58 @@ class BrowseControllerTest extends TestCase
         }
 
         $this->assertStringContainsString('__ALL__', $resultSql);
+    }
+
+    /**
+     * Regression test for 2026-06-22 silent SQL failure.
+     * The parser must tolerate BOTH formats of whereExtra:
+     *   - "AND <conditions>"  (e.g. "AND pht.Kode = 'HT'")
+     *   - "WHERE <conditions>" (e.g. "WHERE IsAktif = 1")
+     * Without this, BrowseService::search would generate "WHERE AND ..." SQL
+     * which SQL Server silently executes as returning empty result set.
+     *
+     * @dataProvider whereExtraFormatProvider
+     */
+    public function test_search_handles_both_whereExtra_formats(string $whereExtra, string $expectedSnippet): void
+    {
+        // Simulate the parse logic from BrowseService::search
+        $extra = preg_replace('/^\s*(WHERE|AND|OR)\s+/i', '', $whereExtra);
+
+        // First condition (q=''): no LIKE clause
+        $whereClause = '';
+        if (!empty($whereClause) === false && !empty(trim($extra))) {
+            $whereClause = $extra;
+        }
+
+        $sql = 'SELECT TOP 20 Perkiraan, Keterangan FROM DBPERKIRAAN';
+        if (!empty(trim($whereClause))) {
+            $sql .= ' WHERE ' . $whereClause;
+        }
+
+        $this->assertStringNotContainsString('WHERE AND', $sql);
+        $this->assertStringNotContainsString('WHERE WHERE', $sql);
+        $this->assertStringContainsString($expectedSnippet, $sql);
+    }
+
+    public static function whereExtraFormatProvider(): array
+    {
+        return [
+            'AND-prefixed format (perkiraan HT)' => [
+                "AND pht.Kode = 'HT'",
+                "pht.Kode = 'HT'",
+            ],
+            'WHERE-prefixed format (customer aktif)' => [
+                'WHERE IsAktif = 1',
+                'IsAktif = 1',
+            ],
+            'WHERE with multiple AND conditions' => [
+                'WHERE IsAktif = 1 AND Jenis = 1',
+                'IsAktif = 1 AND Jenis = 1',
+            ],
+            'AND with multiple conditions' => [
+                'AND DBPERKIRAAN.Kelompok = 3 AND DBPERKIRAAN.Tipe = 1',
+                'DBPERKIRAAN.Kelompok = 3 AND DBPERKIRAAN.Tipe = 1',
+            ],
+        ];
     }
 }

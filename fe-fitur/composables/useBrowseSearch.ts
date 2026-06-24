@@ -34,17 +34,25 @@ export function useBrowseSearch(browseType: string) {
    * Search records for the browse type.
    * Debounce is handled by the component — this just calls the API.
    */
-  async function search(q: string, limit = 20): Promise<BrowseSearchResult[]> {
+  async function search(q: string, limit = 20, parentFilters?: Record<string, string>): Promise<BrowseSearchResult[]> {
     loading.value = true
     error.value = null
 
     try {
       const effectiveType = getEffectiveBrowseType()
+      const queryParams: Record<string, string | number> = { q, limit }
+      if (parentFilters && typeof parentFilters === 'object') {
+        for (const [key, value] of Object.entries(parentFilters)) {
+          if (value) {
+            queryParams[`parent[${key}]`] = value
+          }
+        }
+      }
       const response = await $fetch<{ success: boolean; data: BrowseSearchResult[] }>(
         `${config.public.apiBase}/browse/${effectiveType}`,
         {
           headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {},
-          query: { q, limit },
+          query: queryParams,
         }
       )
 
@@ -67,7 +75,7 @@ export function useBrowseSearch(browseType: string) {
    * Validate a single code — check if it exists in DB.
    * Used by single mode (blur/enter) and tags mode.
    */
-  async function validate(code: string): Promise<BrowseSearchResult | null> {
+  async function validate(code: string, parentFilters?: Record<string, string>): Promise<BrowseSearchResult | null> {
     if (!code || code.trim() === '') {
       loading.value = false
       return null
@@ -81,11 +89,19 @@ export function useBrowseSearch(browseType: string) {
 
     try {
       const effectiveType = getEffectiveBrowseType()
+      const queryParams: Record<string, string | number> = { q: code, limit: 1 }
+      if (parentFilters && typeof parentFilters === 'object') {
+        for (const [key, value] of Object.entries(parentFilters)) {
+          if (value) {
+            queryParams[`parent[${key}]`] = value
+          }
+        }
+      }
       const response = await $fetch<{ success: boolean; data: BrowseSearchResult[] }>(
         `${config.public.apiBase}/browse/${effectiveType}`,
         {
           headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {},
-          query: { q: code, limit: 1 },
+          query: queryParams,
         }
       )
 
@@ -113,12 +129,12 @@ export function useBrowseSearch(browseType: string) {
   /**
    * Validate multiple codes (batch) — used by tags mode.
    */
-  async function validateBatch(codes: string[]): Promise<BrowseSearchResult[]> {
+  async function validateBatch(codes: string[], parentFilters?: Record<string, string>): Promise<BrowseSearchResult[]> {
     if (!codes || codes.length === 0) return []
 
     const found: BrowseSearchResult[] = []
     const promises = codes.map(async (code) => {
-      const result = await validate(code)
+      const result = await validate(code, parentFilters)
       if (result) {
         found.push(result)
       } else {
@@ -134,8 +150,8 @@ export function useBrowseSearch(browseType: string) {
   /**
    * Get all records (no filter) — used by checkbox mode to load full list.
    */
-  async function getAll(limit = 500): Promise<BrowseSearchResult[]> {
-    return search('', limit)
+  async function getAll(limit = 500, parentFilters?: Record<string, string>): Promise<BrowseSearchResult[]> {
+    return search('', limit, parentFilters)
   }
 
   function clear() {
@@ -157,6 +173,8 @@ export function useBrowseSearch(browseType: string) {
       '9111': 'KodeKota',
       '157': 'KodeSubGrp',
       '10054': 'Nomor',
+      '100409': 'Perkiraan',
+      '100408': 'Perkiraan',
       'perkiraan': 'Perkiraan',
     }
     return keyFieldMap[browseType] || 'Perkiraan'
@@ -176,6 +194,8 @@ export function useBrowseSearch(browseType: string) {
       '9111': 'NamaKota',
       '157': 'NamaSubGrp',
       '10054': 'Keterangan',
+      '100409': 'Keterangan',
+      '100408': 'Keterangan',
     }
     return labelFieldMap[browseType] || 'Keterangan'
   }
