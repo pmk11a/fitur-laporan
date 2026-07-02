@@ -730,15 +730,20 @@ class ReportService
     private function computeRunningBalance(array $data, string $datasetName): array
     {
         // Only apply to datasets that have a saldo-like column
-        if (empty($data) || !isset($data[0]['SaldoAkhir'])) {
+        if (empty($data)) {
+            return $data;
+        }
+
+        $deltaCol = isset($data[0]['SaldoRp']) ? 'SaldoRp' : (isset($data[0]['SaldoAkhir']) ? 'SaldoAkhir' : null);
+        if ($deltaCol === null) {
             return $data;
         }
 
         $running = 0.0;
         foreach ($data as &$row) {
-            $val = (float)($row['SaldoAkhir'] ?? 0);
+            $val = (float)($row[$deltaCol] ?? 0);
             $running += $val;
-            $row['SaldoAkhir'] = $running;
+            $row[$deltaCol] = $running;
         }
 
         return $data;

@@ -300,13 +300,16 @@ class AdminReportService
     private function substituteParams(string $sql, array $filters): string
     {
         // Replace @ParamName placeholders with dummy safe values
+        // Sort by length DESC for defense in depth (longer @kodesupp1 before @kodesupp)
+        uksort($filters, fn($a, $b) => strlen($b) - strlen($a));
         foreach ($filters as $key => $value) {
             $placeholder = '@' . $key;
-            if (str_contains($sql, $placeholder)) {
+            // Use lookaround to avoid substring collision (e.g. @kodesupp1 vs @kodesupp)
+            if (preg_match('/(?<!\w)' . preg_quote($placeholder, '/') . '(?!\w)/i', $sql)) {
                 $dummy = is_array($value) && count($value) > 0
                     ? "'" . addslashes($value[0]) . "'"
                     : (is_numeric($value) ? "1" : "'preview'");
-                $sql = str_replace($placeholder, $dummy, $sql);
+                $sql = preg_replace('/(?<!\w)' . preg_quote($placeholder, '/') . '(?!\w)/i', $dummy, $sql, 1);
             }
         }
         return $sql;
