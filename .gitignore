@@ -16,6 +16,10 @@ storage/*.key
 storage/pail/
 /vendor
 .nuxt/
+.output/
+dist/
+build/
+out/
 
 # --- Environment (.env BUKAN .env.example) ---
 .env
@@ -60,11 +64,6 @@ coverage/
 /horizon/
 *.cache
 
-# --- Build artifacts ---
-dist/
-build/
-out/
-
 # --- Python (docs/pwt) ---
 __pycache__/
 *.pyc
@@ -73,7 +72,6 @@ __pycache__/
 .Python
 *.egg-info/
 .eggs/
-dist/
 *.whl
 venv/
 ENV/
@@ -92,10 +90,25 @@ temp/
 credentials.json
 secrets.json
 
-#reference
+# --- Claude Memory / Feedback (local dev notes) ---
+.claude/memory/feedback/
+.claude/memory/project/
+.claude/memory/reference/
+
+# --- Shared plans & tasks (local) ---
+.shared/tasks.json
+.shared/plans/
+
+# --- Agent converter (local dev) ---
+agent-converter/
+
+# --- Transcripts / docs ---
+transcrpit/
+
+# --- Reference ---
 /pwt
 /ai-review
 /docs
 
-#misc
+# --- Misc ---
 serve8080.bat

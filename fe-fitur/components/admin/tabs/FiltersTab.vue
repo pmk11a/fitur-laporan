@@ -166,19 +166,22 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import type { AdminFilter } from '~/stores/adminReports'
+import { useAdminBrowseStore } from '~/stores/adminBrowse'
 
 const store = useAdminReportStore()
+const browseTypesStore = useAdminBrowseStore()
 
 const showModal = ref(false)
 const editingFilter = ref<AdminFilter | null>(null)
 
-// Browse type groups sourced from BrowseService.php (single source of truth)
-const browseTypeGroups = [
+// Fallback hardcoded browse types (used when API fails or while loading)
+const fallbackBrowseTypeGroups = [
   {
     label: 'Perkiraan',
     items: [
-      { value: 'perkiraan', label: 'Perkiraan (1005)' },
+      { value: '1005', label: 'Perkiraan (1005)' },
       { value: '10051', label: 'Perkiraan (UserMode)' },
       { value: '10053', label: 'Perkiraan Kas/Bank' },
       { value: '10054', label: 'LR HPP' },
@@ -226,6 +229,34 @@ const browseTypeGroups = [
     ]
   },
 ]
+
+// Dynamic browse type groups from API, grouped by category
+const browseTypeGroups = computed(() => {
+  const sources = browseTypesStore.browseTypes
+  if (sources.length > 0) {
+    const groups: Record<string, Array<{ value: string; label: string }>> = {}
+    for (const t of sources) {
+      if (!groups[t.group]) groups[t.group] = []
+      const srcBadge = t.source === 'hardcoded' ? ' [Hardcoded]' : ''
+      groups[t.group].push({ value: t.kodeBrowse, label: `${t.kodeBrowse}${srcBadge}` })
+    }
+    const result = Object.entries(groups).map(([label, items]) => ({ label, items }))
+    result.sort((a, b) => a.label.localeCompare(b.label))
+    return result
+  }
+  return fallbackBrowseTypeGroups
+})
+
+// Expose dynamic sources count for template fallback check
+const dynamicSources = computed(() => browseTypesStore.browseTypes)
+
+// Load browse types on mount
+onMounted(async () => {
+  await Promise.all([
+    browseTypesStore.fetchConfigs(),
+    browseTypesStore.fetchBrowseTypes(),
+  ])
+})
 
 const form = reactive({
   nama_filter: '',

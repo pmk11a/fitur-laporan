@@ -8,6 +8,10 @@ use Illuminate\Support\Facades\Log;
 
 class ReportService
 {
+    public function __construct(
+        protected BrowseService $browseService
+    ) {
+    }
     /**
      * Get menu items for sidebar based on user access
      */
@@ -271,7 +275,11 @@ class ReportService
                 [$idLaporan]
             );
 
-            return array_map(function ($p) {
+            // First pass: collect all filters with their browse configs
+            $allFilters = [];
+            $filtersByField = []; // index by nama_filter for quick lookup
+
+            foreach ($params as $p) {
                 $konfigurasi = null;
                 if (!empty($p->konfigurasi)) {
                     try {
@@ -281,21 +289,137 @@ class ReportService
                     }
                 }
 
-                return [
+                $kodeBrowse = $p->kode_browse ?? ($konfigurasi['kode_browse'] ?? null);
+                $browseConfig = null;
+
+                if ($kodeBrowse) {
+                    $browseConfig = $this->browseService->getConfig($kodeBrowse);
+                }
+
+                $filter = [
                     'id_parameter' => $p->id_parameter,
                     'nama_filter' => $p->nama_filter,
                     'label' => $p->label ?? $p->nama_filter,
                     'tipe_input' => $p->tipe_input,
                     'wajib_isi' => (bool) $p->wajib_isi,
                     'nilai_default' => $p->nilai_default,
-                    'kode_browse' => $p->kode_browse ?? ($konfigurasi['kode_browse'] ?? null),
-                    'mode' => $konfigurasi['mode'] ?? null,  // 'single', 'tags', 'checkbox'
-                    'konfigurasi' => $konfigurasi,  // full JSON: parent_filters, etc.
+                    'kode_browse' => $kodeBrowse,
+                    'mode' => $konfigurasi['mode'] ?? null,
+                    'konfigurasi' => $konfigurasi,
+                    'browse_config' => $browseConfig,
+                    // Parent filter metadata (will be populated in second pass)
+                    'parent_filter_ref' => null,  // reference to parent filter
+                    'parent_filter_config' => null, // how to resolve parent value
                 ];
-            }, $params);
+
+                $allFilters[] = $filter;
+                $filtersByField[$p->nama_filter] = &$filter;
+            }
+
+            // Second pass: resolve parent filter relationships
+            foreach ($allFilters as &$filter) {
+                $browseConfig = $filter['browse_config'];
+                $konfigurasi = $filter['konfigurasi'];
+
+                // Collect parent_filters from both browse_config (dbbrowseconfigs) and
+                // konfigurasi (dbparameterlaporan.konfigurasi). Konfigurasi-level parent_filters
+                // are used when the browse config has none or when they are more specific
+                // (e.g., a custom "parent" field name mapping from Delphi-style configs).
+                $parentFiltersList = [];
+                if (!empty($browseConfig['parent_filters']) && is_array($browseConfig['parent_filters'])) {
+                    $parentFiltersList = $browseConfig['parent_filters'];
+                } elseif (is_array($konfigurasi) && !empty($konfigurasi['parent_filters']) && is_array($konfigurasi['parent_filters'])) {
+                    // Map konfigurasi-level parent_filters to standard format.
+                    // DB-style: [{source_column: 'Perkiraan', operator: '=', type: 'exact'}]
+                    // Konfigurasi-style: [{source: 'Perkiraan', target: 'Perkiraan'}]
+                    foreach ($konfigurasi['parent_filters'] as $pf) {
+                        $mapped = [
+                            'source_column' => $pf['source'] ?? $pf['source_column'] ?? null,
+                            'operator' => $pf['operator'] ?? '=',
+                            'type' => $pf['type'] ?? 'exact',
+                        ];
+                        // Also capture target for frontend reference
+                        if (!empty($pf['target'])) {
+                            $mapped['target'] = $pf['target'];
+                        }
+                        if ($mapped['source_column']) {
+                            $parentFiltersList[] = $mapped;
+                        }
+                    }
+                }
+
+                if (empty($parentFiltersList)) {
+                    continue;
+                }
+
+                foreach ($parentFiltersList as $pf) {
+                    $sourceColumn = $pf['source_column'] ?? null;
+                    if (!$sourceColumn) {
+                        continue;
+                    }
+
+                    // Prefer explicit target from konfigurasi parent_filter mapping
+                    $parentFilterName = $pf['target'] ?? null;
+
+                    // If no explicit target, try konfigurasi's parent_filter reference
+                    if (!$parentFilterName) {
+                        $parentFilterName = $konfigurasi['parent_filter'] ?? null;
+                    }
+
+                    // Fallback: try to match by source_column naming convention
+                    if (!$parentFilterName) {
+                        $parentFilterName = $this->inferParentFilterName($sourceColumn);
+                    }
+
+                    if ($parentFilterName && isset($filtersByField[$parentFilterName])) {
+                        $filter['parent_filter_ref'] = $parentFilterName;
+                        $filter['parent_filter_config'] = [
+                            'source_column' => $sourceColumn,
+                            'operator' => $pf['operator'] ?? '=',
+                            'type' => $pf['type'] ?? 'exact',
+                            // The actual value will be resolved at runtime from filter values
+                            'description' => "Parent value sourced from filter '{$parentFilterName}'",
+                        ];
+                        break; // Only support one parent for now
+                    }
+                }
+            }
+
+            return $allFilters;
         } catch (\Exception $e) {
             return [];
         }
+    }
+
+    /**
+     * Infer parent filter name from source column name.
+     * Converts PascalCase/camelCase to lowercase with common patterns.
+     */
+    private function inferParentFilterName(string $sourceColumn): ?string
+    {
+        // Common patterns for grouping hierarchies:
+        // KodeGrp → kodeGrup (group -> subgroup)
+        // KodeSubGrp → kodeSubGrup (subgroup -> sub-subgroup)
+        // Perkiraan → perkiraan
+        // KodeBag → kodeBag
+        // KodeGdg → kodeGdg
+
+        // Try lowercase first
+        $lowercase = strtolower($sourceColumn);
+
+        // Handle common abbreviations
+        $patterns = [
+            'kodegrp' => 'kodeGrup',
+            'kodesubgrp' => 'kodeSubGrup',
+            'kodebag' => 'kodeBag',
+            'kodebrg' => 'kodeBrg',
+            'kodegdg' => 'kodeGdg',
+            'perkiraan' => 'perkiraan',
+            'kodecustsupp' => 'kodeCustSupp',
+            'kodemenu' => 'kodeMenu',
+        ];
+
+        return $patterns[$lowercase] ?? $lowercase;
     }
 
     private function getQueries(int $idLaporan): array

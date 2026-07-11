@@ -2,8 +2,7 @@ Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-s
 
 Tradeoff: These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
-1. Baca prd.md
-2. Think Before Coding
+1. Think Before Coding
 Don't assume. Don't hide confusion. Surface tradeoffs.
 
 Before implementing:
@@ -12,7 +11,7 @@ State your assumptions explicitly. If uncertain, ask.
 If multiple interpretations exist, present them - don't pick silently.
 If a simpler approach exists, say so. Push back when warranted.
 If something is unclear, stop. Name what's confusing. Ask.
-3. Simplicity First
+2. Simplicity First
 Minimum code that solves the problem. Nothing speculative.
 
 No features beyond what was asked.
@@ -22,7 +21,7 @@ No error handling for impossible scenarios.
 If you write 200 lines and it could be 50, rewrite it.
 Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
 
-4. Surgical Changes
+3. Surgical Changes
 Touch only what you must. Clean up only your own mess.
 
 When editing existing code:
@@ -37,7 +36,7 @@ Remove imports/variables/functions that YOUR changes made unused.
 Don't remove pre-existing dead code unless asked.
 The test: Every changed line should trace directly to the user's request.
 
-5. Goal-Driven Execution
+4. Goal-Driven Execution
 Define success criteria. Loop until verified.
 
 Transform tasks into verifiable goals:
@@ -64,9 +63,23 @@ Workflow:
 4. Verify with tests
 ```
 
-Why: User reported `kodesupp1` corruption; root cause was `str_replace` substring. There were OTHER `str_replace` calls elsewhere (e.g. `@IDUser` handler in ReportService) that had the same fragility. Surface fixes look helpful; deep fixes prevent recurrence.
-
 These guidelines are working if: fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+## Self-learning
+When I correct you or you catch yourself making a mistake, before continuing, add the lesson as a one-line rule under #LESSONS so it never happens again.
+
+## Lesson
+
+## LESSONS
+
+- **Baca CLAUDE.md & MEMORY.md dulu** sebelum coding apapun — cek `.claude/memory/MEMORY.md` dan rule dari user.
+- **Constructor change = audit all callers**: setiap ubah constructor, `grep` semua `new XxxClass()` dan ganti ke DI.
+- **Test endpoint (curl) sebelum lanjut**: 1 perubahan controller = 1 curl test. Jangan multi-edit tanpa verify.
+- **Fix root cause, bukan symptoms**: kalau API error, cek `curl` dulu sebelum tambah code di frontend.
+- **Single change → verify → next change**: jangan batch 4 edit sekaligus tanpa test satu-satu.
+- **Route order matters**: specific routes MUST be registered before parameterized ones (e.g., `/browse/list` before `/browse/{kodeBrowse}`).
+- **Static route vs param**: use `where()` clause with negative lookahead to prevent params from swallowing literal routes (e.g., `where('kodeBrowse', '^(?!list$|tables$|sync$).+')`).
+- **Browse type dropdown must be dynamic**: FiltersTab browse types now from API, not hardcoded. Single source of truth = BrowseService::types().
 
 ## 6. Memory System
 

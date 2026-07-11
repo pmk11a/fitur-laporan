@@ -20,11 +20,17 @@
 
 <script setup lang="ts">
 const sidebarOpen = ref(true)
+const authStore = useAuthStore()
+const menuStore = useMenuStore()
 
 // Handle responsive sidebar
 onMounted(() => {
   if (window.innerWidth < 1024) {
     sidebarOpen.value = false
+  }
+  // Fetch menus globally when layout loads, not just on sidebar mount
+  if (authStore.isAuthenticated && menuStore.menus.length === 0) {
+    menuStore.fetchMenus()
   }
 })
 </script>

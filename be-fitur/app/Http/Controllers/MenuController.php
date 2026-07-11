@@ -10,9 +10,9 @@ class MenuController extends Controller
 {
     protected ReportService $reportService;
 
-    public function __construct()
+    public function __construct(ReportService $reportService)
     {
-        $this->reportService = new ReportService();
+        $this->reportService = $reportService;
     }
 
     /**

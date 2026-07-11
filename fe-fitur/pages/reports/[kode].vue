@@ -143,6 +143,7 @@
                 :mode="getFilterMode(filter)"
                 :placeholder="filter.label"
                 :parent-filters="resolveParentFilters(filter)"
+                show-header
               />
 
               <!-- Legacy perkiraan type (maps to browse) -->
@@ -152,6 +153,7 @@
                 browse-type="perkiraan"
                 mode="single"
                 :placeholder="filter.label"
+                show-header
               />
 
               <!-- Default fallback -->

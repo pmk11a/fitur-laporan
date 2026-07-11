@@ -22,12 +22,35 @@ export function useBrowseSearch(browseType: string) {
   const error = ref<string | null>(null)
   const validatedItems = ref<Map<string, BrowseSearchResult>>(new Map())
 
+  // Lazily resolved config from backend
+  const browseConfig = ref<{ keyField: string; labelField: string } | null>(null)
+
   /**
    * Get effective browse type (map legacy to valid types)
    */
   function getEffectiveBrowseType(): string {
     if (browseType === 'perkiraan') return '1005'
     return browseType
+  }
+
+  /**
+   * Resolve keyField/labelField from backend config.
+   * Cached after first successful fetch; falls back to local maps.
+   */
+  async function resolveConfig(): Promise<void> {
+    if (browseConfig.value) return
+    try {
+      const effectiveType = getEffectiveBrowseType()
+      const resp = await $fetch<{ success: boolean; data: { keyField: string; labelField: string } }>(
+        `${config.public.apiBase}/browse/${effectiveType}/config`,
+        { headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {} }
+      )
+      if (resp.success && resp.data) {
+        browseConfig.value = { keyField: resp.data.keyField, labelField: resp.data.labelField }
+      }
+    } catch {
+      // fallback handled by getKeyField/getLabelField below
+    }
   }
 
   /**
@@ -159,45 +182,38 @@ export function useBrowseSearch(browseType: string) {
     error.value = null
   }
 
+  // Local fallback maps — only used if backend /config call fails (offline, etc.)
+  const keyFieldMap: Record<string, string> = {
+    '10141': 'KodeCustSupp', '10142': 'KodeCustSupp', '10143': 'KodeCustSupp',
+    '911': 'KodeBrg', '912': 'KodeBrg', '915': 'KodeBrg', '917': 'KodeBrg',
+    '120302': 'KodeBrg', '3001101': 'KodeBrg',
+    '916': 'KodeGdg', '11002': 'KodeGdg', '11009': 'KodeGdg',
+    '1004': 'Devisi',
+    '1006': 'KodeVls', '11001': 'KodeVls', '2082': 'KodeVls',
+    '1008': 'KodeKategori', '10081': 'KodeKategori',
+    '1002': 'KodeBag', '10021': 'KdDep', '1003': 'KodeJab',
+    '91117': 'NOSPK', '9111': 'KodeKota', '157': 'KodeSubGrp',
+    '10054': 'Nomor', '100409': 'Perkiraan', '100408': 'Perkiraan', 'perkiraan': 'Perkiraan',
+  }
+  const labelFieldMap: Record<string, string> = {
+    '10141': 'NamaCustSupp', '10142': 'NamaCustSupp', '10143': 'NamaCustSupp',
+    '911': 'NamaBrg', '912': 'NamaBrg', '915': 'NamaBrg', '917': 'NamaBrg',
+    '120302': 'NamaBrg', '3001101': 'NamaBrg',
+    '916': 'Nama', '11002': 'Nama', '11009': 'Nama',
+    '1004': 'NamaDevisi',
+    '1006': 'NamaVls', '11001': 'NamaVls', '2082': 'NamaVls',
+    '1008': 'Keterangan', '10081': 'Keterangan',
+    '1002': 'Namabag', '10021': 'NmDep', '1003': 'Namajab',
+    '91117': 'NamaBrg', '9111': 'NamaKota', '157': 'NamaSubGrp',
+    '10054': 'Keterangan', '100409': 'Keterangan', '100408': 'Keterangan',
+  }
+
   function getKeyField(): string {
-    const keyFieldMap: Record<string, string> = {
-      '10141': 'KodeCustSupp', '10142': 'KodeCustSupp', '10143': 'KodeCustSupp',
-      '911': 'KodeBrg', '912': 'KodeBrg', '915': 'KodeBrg', '917': 'KodeBrg',
-      '120302': 'KodeBrg', '3001101': 'KodeBrg',
-      '916': 'KodeGdg', '11002': 'KodeGdg', '11009': 'KodeGdg',
-      '1004': 'Devisi',
-      '1006': 'KodeVls', '11001': 'KodeVls', '2082': 'KodeVls',
-      '1008': 'KodeKategori', '10081': 'KodeKategori',
-      '1002': 'KodeBag', '10021': 'KdDep', '1003': 'KodeJab',
-      '91117': 'NOSPK',
-      '9111': 'KodeKota',
-      '157': 'KodeSubGrp',
-      '10054': 'Nomor',
-      '100409': 'Perkiraan',
-      '100408': 'Perkiraan',
-      'perkiraan': 'Perkiraan',
-    }
-    return keyFieldMap[browseType] || 'Perkiraan'
+    return browseConfig.value?.keyField ?? keyFieldMap[browseType] ?? 'Perkiraan'
   }
 
   function getLabelField(): string {
-    const labelFieldMap: Record<string, string> = {
-      '10141': 'NamaCustSupp', '10142': 'NamaCustSupp', '10143': 'NamaCustSupp',
-      '911': 'NamaBrg', '912': 'NamaBrg', '915': 'NamaBrg', '917': 'NamaBrg',
-      '120302': 'NamaBrg', '3001101': 'NamaBrg',
-      '916': 'Nama', '11002': 'Nama', '11009': 'Nama',
-      '1004': 'NamaDevisi',
-      '1006': 'NamaVls', '11001': 'NamaVls', '2082': 'NamaVls',
-      '1008': 'Keterangan', '10081': 'Keterangan',
-      '1002': 'Namabag', '10021': 'NmDep', '1003': 'Namajab',
-      '91117': 'NamaBrg',
-      '9111': 'NamaKota',
-      '157': 'NamaSubGrp',
-      '10054': 'Keterangan',
-      '100409': 'Keterangan',
-      '100408': 'Keterangan',
-    }
-    return labelFieldMap[browseType] || 'Keterangan'
+    return browseConfig.value?.labelField ?? labelFieldMap[browseType] ?? 'Keterangan'
   }
 
   return {
@@ -211,5 +227,6 @@ export function useBrowseSearch(browseType: string) {
     clear,
     getKeyField,
     getLabelField,
+    resolveConfig,
   }
 }

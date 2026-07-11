@@ -50,6 +50,7 @@ definePageMeta({
   middleware: 'auth'
 })
 
+const authStore = useAuthStore()
 const menuStore = useMenuStore()
 const router = useRouter()
 
@@ -61,7 +62,15 @@ interface MenuItem {
   OL: number
   icon?: string
   type?: string
+  children?: MenuItem[]
 }
+
+// Ensure menus are loaded even if sidebar hasn't mounted yet
+onMounted(async () => {
+  if (authStore.isAuthenticated && menuStore.menus.length === 0) {
+    await menuStore.fetchMenus()
+  }
+})
 
 function openReport(menu: MenuItem) {
   router.push(`/reports/${menu.KODEMENU}`)

@@ -82,6 +82,13 @@ class BrowseController extends Controller
                 'keyField' => $config['keyField'],
                 'labelField' => $config['labelField'],
                 'additionalFields' => $config['additionalFields'] ?? [],
+                'table' => $config['table'] ?? null,
+                'query' => $config['query'] ?? null,
+                'joins' => $config['joins'] ?? null,
+                'whereExtra' => $config['whereExtra'] ?? null,
+                'alias_fields' => $config['alias_fields'] ?? null,
+                'parent_filters' => $config['parent_filters'] ?? null,
+                'params' => $config['params'] ?? null,
             ],
         ]);
     }

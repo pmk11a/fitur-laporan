@@ -26,8 +26,12 @@ class BrowseService
      * Config for each browse type.
      * Key = KodeBrowse string (integer from Delphi).
      * Value = array with table, keyField, labelField, additionalFields, joins, whereExtra.
+     *
+     * NOTE: This is the canonical source for kode_browse configs used by the
+     * legacy Delphi reports. New reports can also register entries here or
+     * define their own config via the GenericBrowseService.
      */
-    private static function getConfigMap(): array
+    public static function getConfigMap(): array
     {
         return [
             // ==================== PERKIRAAN ====================
@@ -505,27 +509,78 @@ class BrowseService
 
     /**
      * Get browse config for a KodeBrowse.
+     *
+     * Priority:
+     * 1. Database-driven (GenericBrowseService) — always checked first
+     * 2. Hardcoded map (getConfigMap) — fallback for legacy Delphi configs
+     *
+     * AdditionalFields merge logic:
+     * - If the DB config is brand new (no hardcoded fallback exists), return it as-is.
+     * - If a hardcoded fallback exists, merge hardcoded additionalFields into the DB
+     *   config so that any fields defined in the canonical hardcoded list but missing
+     *   from the DB row are automatically available.
      */
     public function getConfig(string $kodeBrowse): ?array
     {
         $map = self::getConfigMap();
-        return $map[$kodeBrowse] ?? null;
+        // 1st priority: database-driven (allows admin to override hardcoded configs)
+        $dbConfig = app(GenericBrowseService::class)->find($kodeBrowse);
+        if ($dbConfig) {
+            // Merge additionalFields from hardcoded map for backward compatibility
+            $hardcoded = $map[$kodeBrowse] ?? null;
+            if ($hardcoded && !empty($hardcoded['additionalFields'])) {
+                $existingAdditionalFields = $dbConfig['additionalFields'] ?? [];
+                $merged = array_values(array_unique(array_merge(
+                    $existingAdditionalFields,
+                    $hardcoded['additionalFields']
+                )));
+                $dbConfig['additionalFields'] = $merged;
+            }
+            return $dbConfig;
+        }
+
+        // 2nd priority: code-driven map (canonical Delphi-mirrored entries)
+        if (isset($map[$kodeBrowse])) {
+            return $map[$kodeBrowse];
+        }
+
+        return null;
     }
 
     /**
      * List all available browse types.
+     *
+     * Priority: database configs override hardcoded ones with same kodeBrowse.
      */
     public function types(): array
     {
+        $dbTypes = app(GenericBrowseService::class)->all();
+        $dbMap = [];
+        foreach ($dbTypes as $t) {
+            $dbMap[$t['kodeBrowse']] = $t;
+        }
+
         $map = self::getConfigMap();
-        return array_map(function ($kode, $config) {
-            return [
+
+        // Merge: hardcoded as base, database overrides
+        $merged = $map;
+        foreach ($dbMap as $k => $v) {
+            $merged[$k] = $v; // DB always wins
+        }
+
+        // Build result with source info
+        $result = [];
+        foreach ($merged as $kode => $config) {
+            $result[] = [
                 'kodeBrowse' => $kode,
-                'keyField' => $config['keyField'],
-                'labelField' => $config['labelField'],
+                'keyField' => $config['keyField'] ?? 'Kode',
+                'labelField' => $config['labelField'] ?? 'Nama',
                 'additionalFields' => $config['additionalFields'] ?? [],
+                'source' => isset($dbMap[$kode]) ? 'database' : 'hardcoded',
             ];
-        }, array_keys($map), array_values($map));
+        }
+
+        return $result;
     }
 
     /**
@@ -537,6 +592,35 @@ class BrowseService
      * @param string|null $userMode  User mode for access filter
      * @return array
      */
+    /**
+     * Detect if a query string contains corrupted Delphi-style single-quote tokens
+     * (e.g., '%''%', ''''', ''''''') that indicate old filter substitution
+     * placeholders rather than valid SQL. When detected and table-based fallback
+     * is available, the caller should skip query-based execution.
+     */
+    private function looksLikeDelphiCorruptedQuery(string $sql): bool
+    {
+        // Common Delphi-to-SQL migration artifacts:
+        // - '%''%'          → original: '%'+EditFilter.Text+'%'
+        // - ''''            → original: single quote separator
+        // - '+EditFilter+'  → original: Delphi variable
+        // - '+EditFilter.Text+' → Delphi variable reference
+        $patterns = [
+            "%''%",          // search pattern artifact
+            "'+'",           // concatenation artifact
+            "%'+%",          // mixed artifact
+            "EditFilter",    // raw Delphi variable name
+            "\+'",           // concatenation with quote
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (stripos($sql, $pattern) !== false) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public function search(string $kodeBrowse, string $q = '', int $limit = 20, ?string $userMode = null, array $parentFilters = []): array
     {
         $config = $this->getConfig($kodeBrowse);
@@ -544,16 +628,71 @@ class BrowseService
             return [];
         }
 
+        // ============================================================================
+        // FIX: Merge hardcoded config's joins/whereExtra/parent_filters as fallback.
+        // Some DB browse configs in `dbbrowseconfigs` were migrated from the hardcoded
+        // config map but lost fields like `joins`, `whereExtra`, or `parent_filters`
+        // during migration. When falling back to table-based execution (either
+        // because there's no query, or because the query is Delphi-corrupted), we
+        // merge missing fields from the hardcoded map so the table-based builder
+        // still has the joins/where it needs.
+        // ============================================================================
+        $hardcoded = $this->getConfigMap()[$kodeBrowse] ?? null;
+        if ($hardcoded) {
+            // Merge `joins` if DB config has it empty/missing
+            if (empty($config['joins']) && !empty($hardcoded['joins'])) {
+                $config['joins'] = $hardcoded['joins'];
+            }
+            // Merge `whereExtra` if missing
+            if (empty($config['whereExtra']) && !empty($hardcoded['whereExtra'])) {
+                $config['whereExtra'] = $hardcoded['whereExtra'];
+            }
+            // Merge `parent_filters` if missing
+            if (empty($config['parent_filters']) && !empty($hardcoded['parent_filters'])) {
+                $config['parent_filters'] = $hardcoded['parent_filters'];
+            }
+            // Merge `additionalFields` if missing
+            if (empty($config['additionalFields']) && !empty($hardcoded['additionalFields'])) {
+                $config['additionalFields'] = $hardcoded['additionalFields'];
+            }
+            // Merge `alias_fields` if missing
+            if (empty($config['alias_fields']) && !empty($hardcoded['alias_fields'])) {
+                $config['alias_fields'] = $hardcoded['alias_fields'];
+            }
+        }
+
         $keyField = $config['keyField'];
         $labelField = $config['labelField'];
-        $table = $config['table'];
+        $table = $config['table'] ?? null;
+        $query = $config['query'] ?? null;
         $additionalFields = $config['additionalFields'] ?? [];
         $joins = $config['joins'] ?? [];
         $whereExtra = $config['whereExtra'] ?? '';
         $aliasFields = $config['alias_fields'] ?? [];
         $bindings = [];
 
+        // ============================================================
+        // MODE: QUERY-BASED (query field provided, overrides table-based)
+        // If a query is defined, it ALWAYS takes precedence over table-based
+        // construction. The table field may also be set for reference, but
+        // the stored SQL should be used verbatim.
+        // ============================================================
+        if ($query !== null) {
+            // Check if the query is a clean, substitutable SQL (no Delphi corruption).
+            // Corrupted queries from old Delphi migration contain stray single-quote
+            // patterns like '%''%' or '''' that won't match known substitution tokens.
+            // In those cases, fall back to table-based if the config supports it.
+            $isCorruptedQuery = $this->looksLikeDelphiCorruptedQuery($query);
+            if (!$isCorruptedQuery || ($joins === null && $table === null)) {
+                return $this->searchQueryBased($query, $keyField, $labelField, $aliasFields, $q, $limit, $bindings, $parentFilters, $config);
+            }
+            // Corrupted query + no table-based fallback available — still try query
+        }
+
+        // ============================================================
+        // MODE: TABLE-BASED (fallback when no query is defined)
         // Build SELECT — use alias_fields for prefixed fields (e.g. cs_NamaCustSupp → cs.NamaCustSupp)
+        // ============================================================
         $selectFields = array_merge([$keyField, $labelField], $additionalFields);
         $selectList = implode(', ', array_map(function ($f) use ($table, $aliasFields) {
             if (isset($aliasFields[$f])) {
@@ -582,10 +721,20 @@ class BrowseService
         }
 
         if ($whereExtra) {
-            // Strip any leading WHERE/AND/OR and normalize
-            $extra = preg_replace('/^\s*(WHERE|AND|OR)\s+/i', '', $whereExtra);
+            // Normalize: collapse internal spaces so "w h e r e" → "where"
+            // before stripping the leading keyword. This handles malformed config values
+            // where spaces were accidentally inserted between letters.
+            $normalizedExtra = preg_replace('/(?<=[A-Za-z])\s+(?=[A-Za-z])/', '', $whereExtra);
+            // Strip leading WHERE/AND/OR (with optional surrounding whitespace)
+            $extra = preg_replace('/^\s*(WHERE|AND|OR)\s+/i', '', $normalizedExtra);
+            // Also strip any remaining leading AND/OR (handles "WHERE AND" edge case)
+            $extra = ltrim($extra);
+            if (preg_match('/^(AND|OR)\s+/i', $extra)) {
+                $extra = preg_replace('/^(AND|OR)\s+/i', '', $extra);
+            }
+            $extra = trim($extra);
             if (!empty($extra)) {
-                if (!empty($whereClause)) {
+                if (!empty(trim($whereClause))) {
                     $whereClause .= ' AND ' . $extra;
                 } else {
                     $whereClause = $extra;
@@ -614,8 +763,10 @@ class BrowseService
             $sql .= ' WHERE ' . $whereClause;
         }
 
-        // Order by key field
-        $sql .= " ORDER BY {$table}.{$keyField}";
+        // Order by key field (table-based only)
+        if ($table) {
+            $sql .= " ORDER BY {$table}.{$keyField}";
+        }
 
         if ($q !== '') {
             $bindings['q1'] = "%{$q}%";
@@ -649,6 +800,123 @@ class BrowseService
     }
 
     /**
+     * Search using a raw query (query-based browse config).
+     *
+     * This handles browse configs that use a custom SQL string instead of
+     * table-based queries. Supports:
+     * - Raw SQL strings (tablename = NULL, query = full SQL)
+     * - WHERE clause injection via :q placeholder or EditFilter.Text substitution
+     * - Stored Procedure calls via EXEC
+     *
+     * @param string $query       Full SQL query or SP call
+     * @param string $keyField   Field to use as key
+     * @param string $labelField Field to use as label
+     * @param array $aliasFields  Map of aliased field names
+     * @param string $q          Search query
+     * @param int $limit          Row limit
+     * @param array $bindings    Parameter bindings
+     * @return array
+     */
+    private function searchQueryBased(string $query, string $keyField, string $labelField, array $aliasFields, string $q, int $limit, array $bindings, array $parentFilters = [], array $config = []): array
+    {
+        $sql = $query;
+
+        // Inject parent_filters as named parameters for query-based configs.
+        // Strategy: find occurrences of ''<P:fieldName>'' placeholder in the query
+        // and replace them with ':bindKey' (without quotes, so the driver handles escaping).
+        // Example:  A.NOBUKTI = ''<P:NoKira1>''  becomes  A.NOBUKTI = :qparent0
+        // The parent filter value is bound securely through PDO.
+        $pfConfig = $config['parent_filters'] ?? [];
+        if (!empty($pfConfig) && !empty($parentFilters)) {
+            foreach ($pfConfig as $pfIdx => $pf) {
+                $sourceKey = $pf['source_column'] ?? '';
+                if (empty($sourceKey) || !isset($parentFilters[$sourceKey])) continue;
+                $op = $pf['operator'] ?? '=';
+                $bindingKey = "qparent{$pfIdx}";
+                $val = $parentFilters[$sourceKey];
+
+                // Try pattern: ''<P:fieldname>'' (Delphi-style single quotes around placeholder)
+                $placeholderInQuote = "''<P:{$sourceKey}>''";
+                $placeholderPlain = "<P:{$sourceKey}>";
+
+                if (strpos($sql, $placeholderInQuote) !== false) {
+                    // Replace ''<P:field>'' with :bindKey (driver handles quoting)
+                    $sql = str_replace($placeholderInQuote, ':' . $bindingKey, $sql);
+                } elseif (strpos($sql, $placeholderPlain) !== false) {
+                    // Replace standalone <P:field> with :bindKey
+                    $sql = str_replace($placeholderPlain, ':' . $bindingKey, $sql);
+                } else {
+                    // Fallback: append AND condition to the WHERE clause
+                    $col = $pf['column'] ?? "[" . $sourceKey . "]";
+                    $sql .= ' AND ' . $col . ' ' . $op . ' :' . $bindingKey;
+                }
+
+                // Bind the value — PDO handles proper escaping
+                $bindings[$bindingKey] = $val;
+            }
+        }
+
+        // If the query already has WHERE/LIKE filter for EditFilter.Text,
+        // we need to substitute it. Detect pattern: like ''%''+EditFilter.Text+''%''
+        if ($q !== '') {
+            // Replace Delphi-style filter: like ''%''+EditFilter.Text+''%''
+            $escapedQ = str_replace("'", "''", $q);
+            $sql = preg_replace(
+                "/like\s*''%'\s*\+[\w.]+\.\w+\s*\+\s*'%''/i",
+                "LIKE '$escapedQ%'",
+                $sql
+            );
+            // Also replace simple EditFilter.Text patterns like: like ''%param%''
+            $sql = preg_replace(
+                "/LIKE\s*''%([^']+)%''/i",
+                "LIKE '$escapedQ%'",
+                $sql
+            );
+        }
+
+        // Wrap as SELECT TOP if not already wrapped
+        $selectStart = strtoupper(substr(ltrim($sql), 0, 6));
+        if ($selectStart === 'SELECT') {
+            // Insert TOP after SELECT if not present
+            if (!preg_match('/^\s*SELECT\s+TOP\s+\d+/i', ltrim($sql))) {
+                $sql = preg_replace('/^\s*SELECT\s+/i', 'SELECT TOP ' . $limit . ' ', $sql, 1);
+            }
+        }
+
+        try {
+            $pdo = DB::connection('sqlsrv')->getPdo();
+            $pdo->setAttribute(\PDO::SQLSRV_ATTR_ENCODING, \PDO::SQLSRV_ENCODING_SYSTEM);
+
+            $results = DB::select($sql, $bindings);
+
+            // Filter results by search query in-memory (for query-based configs)
+            // because WHERE injection is complex in raw SQL
+            if ($q !== '') {
+                $results = array_filter($results, function ($r) use ($keyField, $labelField, $q) {
+                    $row = (array) $r;
+                    $keyVal = strtolower($row[$keyField] ?? '');
+                    $labelVal = strtolower($row[$labelField] ?? '');
+                    $search = strtolower($q);
+                    return stripos($keyVal, $search) !== false || stripos($labelVal, $search) !== false;
+                });
+                $results = array_slice(array_values($results), 0, $limit);
+            }
+
+            return array_map(function ($r) {
+                $row = (array) $r;
+                foreach ($row as $k => $v) {
+                    if (is_string($v)) {
+                        $row[$k] = mb_convert_encoding($v, 'UTF-8', 'Windows-1252');
+                    }
+                }
+                return $row;
+            }, $results);
+        } catch (\Exception $e) {
+            return [];
+        }
+    }
+
+    /**
      * Validate a single code and return full row data.
      */
     public function validateCode(string $kodeBrowse, string $code): ?array
@@ -664,8 +932,14 @@ class BrowseService
 
         $sql = "SELECT TOP 1 * FROM {$table} WHERE {$keyField} = :code";
         if ($whereExtra) {
-            // Strip any leading WHERE/AND/OR and normalize
-            $extra = preg_replace('/^\s*(WHERE|AND|OR)\s+/i', '', $whereExtra);
+            // Normalize: collapse internal spaces so "w h e r e" → "where"
+            $normalizedExtra = preg_replace('/(?<=[A-Za-z])\s+(?=[A-Za-z])/', '', $whereExtra);
+            $extra = preg_replace('/^\s*(WHERE|AND|OR)\s+/i', '', $normalizedExtra);
+            $extra = ltrim($extra);
+            if (preg_match('/^(AND|OR)\s+/i', $extra)) {
+                $extra = preg_replace('/^(AND|OR)\s+/i', '', $extra);
+            }
+            $extra = trim($extra);
             if (!empty(trim($extra))) {
                 $sql .= ' AND ' . trim($extra);
             }

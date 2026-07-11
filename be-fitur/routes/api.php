@@ -6,6 +6,7 @@ use App\Http\Controllers\MenuController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\BrowseController;
 use App\Http\Controllers\AdminReportController;
+use App\Http\Controllers\AdminBrowseController;
 use App\Http\Controllers\Api\UserPreferenceController;
 use App\Http\Controllers\NotaController;
 
@@ -40,6 +41,18 @@ Route::prefix('reports')->group(function () {
     Route::get('/perkiraan/search', [ReportController::class, 'searchPerkiraan']);
     Route::get('/{kodeMenu}', [ReportController::class, 'show']);
     Route::post('/{kodeMenu}/preview', [ReportController::class, 'preview']);
+
+    // Test Browse endpoints
+    Route::get('/test/browse/types', [ReportController::class, 'testBrowseTypes']);
+    Route::get('/test/browse/{kodeBrowse}', [ReportController::class, 'testBrowseSearch']);
+    Route::get('/test/browse/{kodeBrowse}/config', [ReportController::class, 'testBrowseConfig']);
+    Route::get('/test/browse/{kodeBrowse}/validate', [ReportController::class, 'testBrowseValidate']);
+    Route::post('/test/browse/{kodeBrowse}/validate-batch', [ReportController::class, 'testBrowseValidateBatch']);
+    Route::get('/test/browse/{kodeBrowse}/all', [ReportController::class, 'testBrowseAll']);
+    Route::get('/test/browse/{kodeBrowse}/search-with-parent', [ReportController::class, 'testBrowseSearchWithParent']);
+
+    // Test Report Config with browse integration
+    Route::get('/test/config/{kodeMenu}', [ReportController::class, 'testReportConfig']);
 });
 
 // Nota print (PDF)
@@ -101,4 +114,16 @@ Route::prefix('admin')->middleware(['auth', 'admin'])->group(function () {
     Route::post('/reports/{id}/access', [AdminReportController::class, 'grantAccess']);
     Route::delete('/reports/{id}/access/{userId}', [AdminReportController::class, 'revokeAccess']);
     Route::get('/users', [AdminReportController::class, 'listUsers']);
+
+    // Browse CRUD
+    Route::get('/browse', [AdminBrowseController::class, 'index']);
+    Route::get('/browse/list', [AdminBrowseController::class, 'list']);
+    Route::post('/browse', [AdminBrowseController::class, 'store']);
+    Route::get('/browse/tables', [AdminBrowseController::class, 'tables']);
+    Route::get('/browse/tables/{tableName}/columns', [AdminBrowseController::class, 'columns']);
+    Route::get('/browse/{kodeBrowse}', [AdminBrowseController::class, 'show'])->where('kodeBrowse', '^(?!list$|tables$|sync$).+');
+    Route::put('/browse/{kodeBrowse}', [AdminBrowseController::class, 'update']);
+    Route::delete('/browse/{kodeBrowse}', [AdminBrowseController::class, 'destroy']);
+    Route::post('/browse/{kodeBrowse}/clone', [AdminBrowseController::class, 'clone']);
+    Route::post('/browse/sync', [AdminBrowseController::class, 'sync']);
 });

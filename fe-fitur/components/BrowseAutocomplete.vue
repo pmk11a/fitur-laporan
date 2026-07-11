@@ -18,12 +18,30 @@
           :disabled="disabled"
           autocomplete="off"
         />
-        <!-- Loading spinner -->
-        <div v-if="browse.loading.value" class="absolute right-2 top-1/2 -translate-y-1/2">
-          <svg class="animate-spin w-4 h-4 text-secondary-400" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-          </svg>
+        <!-- Right-side controls -->
+        <div class="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 pr-1">
+          <!-- Header toggle (only when props.showHeader is true) -->
+          <button
+            v-if="props.showHeader"
+            type="button"
+            class="p-1 rounded text-secondary-400 hover:text-primary-500 hover:bg-primary-50 transition-colors"
+            @click="headerVisible = !headerVisible"
+            :title="headerVisible ? 'Hide columns' : 'Show columns'"
+          >
+            <svg v-if="headerVisible" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h6m-6 4h12m-6 4h6m-6 4h12M3 17h18"/>
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18H4"/>
+            </svg>
+          </button>
+          <!-- Loading spinner -->
+          <div v-if="browse.loading.value" class="p-1">
+            <svg class="animate-spin w-4 h-4 text-secondary-400" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+          </div>
         </div>
       </div>
 
@@ -32,6 +50,19 @@
         v-if="isOpen && browse.results.length > 0"
         class="absolute z-50 w-full mt-1 bg-white border border-secondary-200 rounded-lg shadow-lg overflow-hidden"
       >
+        <!-- Column headers (visible when toggle is on) -->
+        <div
+          v-if="headerVisible && (browseConfig?.additionalFields?.length ?? 0) > 0"
+          class="flex items-center px-4 py-1.5 bg-primary-50 border-b border-primary-100 text-[10px] font-semibold uppercase tracking-wider text-primary-600"
+        >
+          <span class="font-mono min-w-[80px]">{{ fieldLabel(browseConfig?.keyField ?? '') }}</span>
+          <span class="ml-2 min-w-[100px]">{{ fieldLabel(browseConfig?.labelField ?? '') }}</span>
+          <span
+            v-for="af in (browseConfig?.additionalFields ?? [])"
+            :key="af"
+            class="ml-2 min-w-[60px]"
+          >{{ fieldLabel(af) }}</span>
+        </div>
         <ul class="max-h-60 overflow-y-auto py-1">
           <li
             v-for="(item, idx) in browse.results"
@@ -45,6 +76,12 @@
           >
             <span class="font-mono font-medium text-secondary-800">{{ getKey(item) }}</span>
             <span class="text-secondary-500 ml-2">{{ getLabel(item) }}</span>
+            <span
+              v-for="af in (browseConfig?.additionalFields ?? [])"
+              :key="af"
+              class="text-secondary-400 ml-2 text-xs"
+              >{{ item[af] ?? '' }}</span
+            >
           </li>
         </ul>
       </div>
@@ -100,6 +137,19 @@
         v-if="isOpen && browse.results.length > 0"
         class="absolute z-50 w-full mt-1 bg-white border border-secondary-200 rounded-lg shadow-lg overflow-hidden"
       >
+        <!-- Column headers (visible when toggle is on) -->
+        <div
+          v-if="headerVisible && (browseConfig?.additionalFields?.length ?? 0) > 0"
+          class="flex items-center px-4 py-1.5 bg-primary-50 border-b border-primary-100 text-[10px] font-semibold uppercase tracking-wider text-primary-600"
+        >
+          <span class="font-mono min-w-[80px]">{{ fieldLabel(browseConfig?.keyField ?? '') }}</span>
+          <span class="ml-2 min-w-[100px]">{{ fieldLabel(browseConfig?.labelField ?? '') }}</span>
+          <span
+            v-for="af in (browseConfig?.additionalFields ?? [])"
+            :key="af"
+            class="ml-2 min-w-[60px]"
+          >{{ fieldLabel(af) }}</span>
+        </div>
         <ul class="max-h-60 overflow-y-auto py-1">
           <li
             v-for="(item, idx) in browse.results"
@@ -113,6 +163,12 @@
           >
             <span class="font-mono font-medium text-secondary-800">{{ getKey(item) }}</span>
             <span class="text-secondary-500 ml-2">{{ getLabel(item) }}</span>
+            <span
+              v-for="af in (browseConfig?.additionalFields ?? [])"
+              :key="af"
+              class="text-secondary-400 ml-2 text-xs"
+              >{{ item[af] ?? '' }}</span
+            >
           </li>
         </ul>
       </div>
@@ -220,7 +276,13 @@
                   class="w-4 h-4 rounded border-secondary-300 text-primary-500 focus:ring-primary-500"
                 />
                 <span class="font-mono text-sm font-medium text-secondary-800">{{ getKey(item) }}</span>
-                <span class="text-secondary-500 text-sm">{{ getLabel(item) }}</span>
+                <span class="text-secondary-500 text-sm ml-2">{{ getLabel(item) }}</span>
+                <span
+                  v-for="af in (browseConfig?.additionalFields ?? [])"
+                  :key="af"
+                  class="text-secondary-400 text-xs ml-2"
+                  >{{ item[af] ?? '' }}</span
+                >
               </label>
             </div>
 
@@ -260,6 +322,7 @@ interface Props {
   placeholder?: string
   disabled?: boolean
   parentFilters?: Record<string, string>
+  showHeader?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -267,6 +330,7 @@ const props = withDefaults(defineProps<Props>(), {
   placeholder: 'Ketik untuk mencari...',
   disabled: false,
   parentFilters: undefined,
+  showHeader: false,
 })
 
 onMounted(async () => {
@@ -331,9 +395,49 @@ watch(
 // CONFIG HELPERS
 // ========================================
 const config = useBrowseConfig()
-const browseConfig = ref<{ keyField: string; labelField: string } | null>(null)
+// Use a minimal interface for browse config that includes additionalFields
+interface BrowseCfg {
+  keyField: string
+  labelField: string
+  additionalFields: string[]
+  table?: string
+  joins?: string[]
+  whereExtra?: string
+  alias_fields?: Record<string, string>
+}
+const browseConfig = ref<BrowseCfg | null>(null)
+const headerVisible = ref(props.showHeader)
 
-// Fallback field map based on BrowseService.php config
+// Human-readable labels for common field names used in additionalFields.
+// Falls back to the field name itself when no mapping exists.
+const FIELD_LABELS: Record<string, string> = {
+  Neraca: 'No. Neraca',
+  Kelompok: 'Kelompok',
+  Tipe: 'Tipe',
+  DK: 'DK',
+  Simbol: 'Simbol',
+  Alamat: 'Alamat',
+  Telpon: 'Telpon',
+  Kota: 'Kota',
+  Kurs: 'Kurs',
+  Sat1: 'Satuan 1',
+  Sat2: 'Satuan 2',
+  Isi: 'Isi',
+  Isi1: 'Isi 1',
+  Isi2: 'Isi 2',
+  NFix: 'NFix',
+  DueDate: 'Jatuh Tempo',
+  JENIS: 'Jenis',
+  IsPpn: 'PPN',
+  KodeArea: 'Kode Area',
+  NamaArea: 'Nama Area',
+}
+function fieldLabel(name: string): string {
+  return FIELD_LABELS[name] ?? name
+}
+
+// Legacy fallback — kept as offline safety net; primary source is now backend API
+// DEPRECATED: new browse types should be added to backend (BrowseService::getConfigMap or dbbrowseconfigs)
 const knownFieldMap: Record<string, { keyField: string; labelField: string }> = {
   '10051': { keyField: 'Perkiraan', labelField: 'Keterangan' },
   '1005': { keyField: 'Perkiraan', labelField: 'Keterangan' },
@@ -401,13 +505,11 @@ onMounted(async () => {
 
 function getKeyField(): string {
   if (browseConfig.value) return browseConfig.value.keyField
-  // Fallback to known config before API resolves
   return knownFieldMap[props.browseType]?.keyField || 'Perkiraan'
 }
 
 function getLabelField(): string {
   if (browseConfig.value) return browseConfig.value.labelField
-  // Fallback to known config before API resolves
   return knownFieldMap[props.browseType]?.labelField || 'Keterangan'
 }
 

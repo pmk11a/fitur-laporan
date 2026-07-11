@@ -14,6 +14,11 @@ export interface BrowseConfig {
   keyField: string
   labelField: string
   additionalFields: string[]
+  table?: string
+  joins?: string[]
+  whereExtra?: string
+  alias_fields?: Record<string, string>
+  parent_filters?: Array<{ source_column: string; operator: string; type: string }>
 }
 
 export function useBrowseConfig() {
@@ -100,7 +105,7 @@ export function useBrowseConfig() {
       '10054': { kodeBrowse: '10054', keyField: 'Nomor', labelField: 'Keterangan', additionalFields: [] },
       'perkiraan': { kodeBrowse: '1005', keyField: 'Perkiraan', labelField: 'Keterangan', additionalFields: [] },
       // Hutang/ Piutang account codes (used by reports 020301-020306)
-      '100409': { kodeBrowse: '100409', keyField: 'Perkiraan', labelField: 'Keterangan', additionalFields: [] },
+      '100409': { kodeBrowse: '100409', keyField: 'Perkiraan', labelField: 'Keterangan', additionalFields: ['Neraca', 'Kelompok', 'Tipe'] },
       '100408': { kodeBrowse: '100408', keyField: 'Perkiraan', labelField: 'Keterangan', additionalFields: [] },
       // Devisi
       '1004': { kodeBrowse: '1004', keyField: 'Devisi', labelField: 'NamaDevisi', additionalFields: [] },

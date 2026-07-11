@@ -99,6 +99,51 @@ export interface AdminKodeMenu {
 }
 
 // ============================================================
+// Admin Browse Types
+// ============================================================
+
+export interface BrowseConfig {
+  kodeBrowse: string
+  keyField: string
+  labelField: string
+  additionalFields?: string[]
+  table?: string
+  query?: string
+  joins?: string[]
+  whereExtra?: string
+  alias_fields?: Record<string, string>
+  parent_filters?: ParentFilter[]
+  params?: any[]
+}
+
+export interface ParentFilter {
+  source_column: string
+  operator: string
+  type: string
+  column?: string
+}
+
+export interface AdminBrowseConfig extends BrowseConfig {
+  source: 'database' | 'hardcoded'
+  can_edit: boolean
+  can_delete: boolean
+}
+
+export interface BrowseListItem {
+  kodeBrowse: string
+  keyField: string
+  labelField: string
+  additionalFields: string[]
+  source: 'database' | 'hardcoded'
+}
+
+export interface TableInfo {
+  name: string
+  type: string
+  nullable: boolean
+}
+
+// ============================================================
 // Store
 // ============================================================
 
